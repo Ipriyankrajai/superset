@@ -1,104 +1,82 @@
-## Agents Guide
+# Superset Monorepo Guide
 
-Actionable rules for repo agents—keep diffs minimal, safe, token-efficient.
+Guidelines for agents and developers working in this repository.
 
-### Purpose & Scope
+## Structure
 
-- Audience: automated coding agents working within this repository.
-- Goal: small, correct diffs aligned with the project's architecture.
-- Non-goals: editing generated artifacts, lockfiles, or `node_modules`.
-
-### Repo Map
-
-- Monorepo managed by Bun workspaces and Turbo (see root `package.json`).
-- Apps: `apps/*` (currently empty - apps to be added)
-- Packages:
-  - `packages/ui` - Shared UI components (shadcn/ui + custom components)
+Bun + Turbo monorepo with:
+- **Apps**: `apps/*` (empty, to be added)
+- **Packages**:
+  - `packages/ui` - Shared UI components (shadcn/ui + TailwindCSS v4)
   - `packages/db` - Drizzle ORM database schema
-  - `packages/utility` - Shared utility functions
   - `packages/constants` - Shared constants
-  - `packages/scripts` - CLI scripts for setup/tooling
-- Tooling: `tooling/typescript` - TypeScript configurations
+  - `packages/models` - Shared data models
+  - `packages/scripts` - CLI tooling
+- **Tooling**: `tooling/typescript` - TypeScript configs
 
-### Stack & Runtimes
+## Tech Stack
 
-- Package manager: Bun only — use Bun for all installs and scripts; do not use npm, yarn, or pnpm.
-- Build system: Turbo
-- Database: Drizzle ORM
-- UI: TailwindCSS v4 + shadcn/ui components in `packages/ui`
+- **Package Manager**: Bun (no npm/yarn/pnpm)
+- **Build System**: Turborepo
+- **Database**: Drizzle ORM + PostgreSQL
+- **UI**: React + TailwindCSS v4 + shadcn/ui
+- **Code Quality**: Biome (formatting + linting at root)
 
-### Agent Priorities
+## Common Commands
 
-- Correctness first: minimal scope and targeted edits.
-- Prefer local patterns and existing abstractions; avoid one-off frameworks.
-- Do not modify build outputs, generated files, or lockfiles.
-- Use Bun for all scripts; do not introduce npm/yarn.
-- Avoid running the local dev server in automation contexts.
-- Respect type safety.
+```bash
+# Development
+bun dev                    # Start all dev servers
+bun test                   # Run tests
+bun build                  # Build all packages
 
-### Styling & UI
+# Code Quality
+bun run lint               # Check formatting + linting (no changes)
+bun run lint:fix           # Fix all auto-fixable issues
+bun run format             # Format code only
+bun run format:check       # Check formatting only (CI)
+bun run typecheck          # Type check all packages
 
-- TailwindCSS v4-first styling with design tokens in `packages/ui/tokens.ts`.
-- All UI components live in `packages/ui/` as a shared package:
-  - shadcn/ui components: `packages/ui/src/components/*.tsx`
-  - Custom components: `ai-elements`, `color-picker`, `icons`
-  - Configuration: `packages/ui/components.json`
-  - Styles: `packages/ui/src/globals.css`
-- Import components via `@superset/ui` package exports:
-  - Components: `@superset/ui/button`, `@superset/ui/input`, etc.
-  - Icons: `@superset/ui/icons`
-  - Color picker: `@superset/ui/color-picker`
-  - AI elements: `@superset/ui/ai-elements`
-  - Utils: `@superset/ui/utils`
-  - Hooks: `@superset/ui/hooks`
-- Adding new shadcn components: Run `npx shadcn@latest add <component>` in `packages/ui/`
-- Path aliases in `packages/ui`: `@/*` maps to `./src/*`
+# Database
+bun run db:push            # Apply schema changes
+bun run db:seed            # Seed database
+bun run db:migrate         # Run migrations
+bun run db:studio          # Open Drizzle Studio
 
-### Database
+# Maintenance
+bun run clean              # Clean root node_modules
+bun run clean:workspaces   # Clean all workspace node_modules
+```
 
-- Schema defined in `packages/db/src/`.
-- Use Drizzle ORM for all database operations.
-- Commands:
-  - `bun run db:push` - Apply schema changes to local dev
-  - `bun run db:seed` - Seed database
-  - `bun run db:migrate` - Run migrations
-  - `bun run db:studio` - Open Drizzle Studio
-  - DO NOT run `db:gen` - reserved for maintainers
+## UI Components
 
-### Context Discipline (for Agents)
+All components in `packages/ui`:
+- **Import**: `@superset/ui/button`, `@superset/ui/input`, etc.
+- **Icons**: `@superset/ui/icons`
+- **Utils**: `@superset/ui/utils`
+- **Hooks**: `@superset/ui/hooks`
+- **Styles**: `@superset/ui/globals.css`
+- **Add shadcn component**: `npx shadcn@latest add <component>` (run in `packages/ui/`)
 
-- Search narrowly with ripgrep; open only files you need.
-- Read small sections; avoid `node_modules`, large assets.
-- Propose minimal diffs aligned with existing conventions; avoid wide refactors.
+## Code Quality
 
-### Common Commands
+**Biome runs at root level** (not per-package) for speed:
+- `biome check` = format + lint + organize imports
+- `biome format` = format only
+- Use `bun run lint:fix` to fix all issues
 
-- `bun dev` - Run all dev servers (via Turbo)
-- `bun test` - Run all tests
-- `bun build` - Build all packages
-- `bun run typecheck` - Type check all packages (via Turbo)
-- `bun run lint` - Check code quality with Biome (format + lint, read-only)
-- `bun run lint:fix` - Fix code quality issues with Biome (format + lint, with writes)
-- `bun run format` - Format code with Biome (write mode)
-- `bun run format:check` - Check code formatting with Biome (read-only)
-- `bun run clean` - Clean root node_modules
-- `bun run clean:workspaces` - Clean all workspace node_modules
+## Agent Rules
 
-### Linting & Formatting
+1. **Keep diffs minimal** - targeted edits only
+2. **Follow existing patterns** - match the codebase style
+3. **Use Bun** - not npm/yarn/pnpm
+4. **Don't modify**: lockfiles, generated files, node_modules
+5. **Type safety** - avoid `any` unless necessary
+6. **Don't run dev servers** in automation
+7. **Search narrowly** - avoid reading large files/assets
 
-- This monorepo uses Biome for both formatting and linting
-- Biome runs at the **root level** (not per-package) for speed and consistency
-- `biome check` = runs both formatter AND linter
-- `biome format` = runs formatter only
-- Workflow:
-  - `bun run lint` - Check for issues (no changes)
-  - `bun run lint:fix` - Fix all auto-fixable issues
-  - `bun run format` - Format code only
-  - `bun run format:check` - Check formatting only (useful for CI)
+## Database Rules
 
-### Notes
-
-- Unit tests can be run with `bun test`
-- Run type checking with `bun run typecheck`
-- DO NOT use TypeScript `any` type unless absolutely necessary
-- Follow existing code patterns and conventions
+- Schema in `packages/db/src/`
+- Use Drizzle ORM for all database operations
+- **DO NOT run `db:gen`** - reserved for maintainers
