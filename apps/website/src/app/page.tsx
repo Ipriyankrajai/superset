@@ -18,8 +18,10 @@ export default function Home() {
                 {/* Hero Content */}
                 <div className="relative z-10 px-8 text-center text-white flex flex-col items-center justify-center gap-4">
                     <FadeUp>
-                        <h1 className="text-[20rem]">⊇</h1>
-                        <h1 className="text-[14rem] font-bold">Superset</h1>
+                        <div className="flex flex-col items-center gap-32">
+                            <h1 className="text-[20rem] leading-none">⊇</h1>
+                            <h1 className="text-[14rem] font-bold leading-none -mt-16">Superset</h1>
+                        </div>
                     </FadeUp>
                     <FadeUp delay={0.2}>
                         <h2 className="text-2xl font-thin">The last app you'll ever need</h2>
@@ -28,10 +30,10 @@ export default function Home() {
             </HeroParallax>
 
             {/* Feature Cards Section */}
-            <section className="py-24 px-8 bg-background">
+            <section className="py-24 px-8 bg-black">
                 <div className="max-w-7xl mx-auto">
                     <FadeUp>
-                        <h2 className="text-4xl font-bold text-center mb-16">
+                        <h2 className="text-4xl font-bold text-center mb-16 text-white">
                             Interactive Features
                         </h2>
                     </FadeUp>
@@ -39,9 +41,9 @@ export default function Home() {
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                         <FadeUp delay={0.1}>
                             <TiltCard>
-                                <Card className="p-8 h-full hover:shadow-2xl transition-shadow">
-                                    <h3 className="text-2xl font-semibold mb-4">Framer Motion</h3>
-                                    <p className="text-muted-foreground">
+                                <Card className="p-8 h-full hover:shadow-2xl transition-shadow bg-zinc-900 border-zinc-800">
+                                    <h3 className="text-2xl font-semibold mb-4 text-white">Framer Motion</h3>
+                                    <p className="text-zinc-400">
                                         Smooth, production-ready animations for hover,
                                         scroll-reveal, and route transitions. DOM-based for optimal
                                         performance.
@@ -52,11 +54,11 @@ export default function Home() {
 
                         <FadeUp delay={0.2}>
                             <TiltCard>
-                                <Card className="p-8 h-full hover:shadow-2xl transition-shadow">
-                                    <h3 className="text-2xl font-semibold mb-4">
+                                <Card className="p-8 h-full hover:shadow-2xl transition-shadow bg-zinc-900 border-zinc-800">
+                                    <h3 className="text-2xl font-semibold mb-4 text-white">
                                         React Three Fiber
                                     </h3>
-                                    <p className="text-muted-foreground">
+                                    <p className="text-zinc-400">
                                         Optional lightweight 3D elements for hero sections and
                                         product showcases. WebGL-powered visual depth.
                                     </p>
@@ -66,11 +68,11 @@ export default function Home() {
 
                         <FadeUp delay={0.3}>
                             <TiltCard>
-                                <Card className="p-8 h-full hover:shadow-2xl transition-shadow">
-                                    <h3 className="text-2xl font-semibold mb-4">
+                                <Card className="p-8 h-full hover:shadow-2xl transition-shadow bg-zinc-900 border-zinc-800">
+                                    <h3 className="text-2xl font-semibold mb-4 text-white">
                                         Clean Architecture
                                     </h3>
-                                    <p className="text-muted-foreground">
+                                    <p className="text-zinc-400">
                                         Composable, maintainable components. 95% DOM-based
                                         interactions with strategic 3D enhancements.
                                     </p>
@@ -82,17 +84,17 @@ export default function Home() {
             </section>
 
             {/* Additional Content Section */}
-            <section className="py-24 px-8">
+            <section className="py-24 px-8 bg-black">
                 <div className="max-w-4xl mx-auto">
                     <FadeUp>
-                        <Card className="p-12">
-                            <h2 className="text-3xl font-bold mb-6">Built for Performance</h2>
-                            <p className="text-muted-foreground text-lg mb-4">
+                        <Card className="p-12 bg-zinc-900 border-zinc-800">
+                            <h2 className="text-3xl font-bold mb-6 text-white">Built for Performance</h2>
+                            <p className="text-zinc-400 text-lg mb-4">
                                 Our approach prioritizes maintainability and performance. By
                                 keeping 95% of interactions DOM-based with Framer Motion, we
                                 ensure fast load times and smooth animations across all devices.
                             </p>
-                            <p className="text-muted-foreground text-lg">
+                            <p className="text-zinc-400 text-lg">
                                 Strategic use of React Three Fiber adds visual depth where it
                                 matters most, without compromising performance or accessibility.
                             </p>
