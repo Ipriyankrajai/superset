@@ -74,19 +74,24 @@ function LitBackground() {
                         key={i.toString()}
                         position={[0, 0, -i * 0.05]}
                         fontSize={1.5}
-                        color="#ffffff"
+                        color="#0a0a0a"
                         anchorX="center"
                         anchorY="middle"
-                        material-metalness={0.9}
-                        material-roughness={0.1}
                     >
                         ⊇
+                        <meshStandardMaterial
+                            color="#333333"
+                            metalness={1.0}
+                            roughness={0.05}
+                            emissive="#000000"
+                            emissiveIntensity={0}
+                        />
                     </Text>
                 ))}
             </group>
 
             {/* Ambient light for base visibility */}
-            <ambientLight intensity={0.3} />
+            <ambientLight intensity={0.5} />
 
             {/* Point light that follows mouse */}
             <pointLight

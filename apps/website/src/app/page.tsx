@@ -16,7 +16,7 @@ export default function Home() {
                 </div>
 
                 {/* Hero Content */}
-                <div className="relative z-10 px-8 text-center text-white flex flex-col items-center justify-center gap-4">
+                <div className="relative z-10 px-8 text-center text-white flex flex-col items-center justify-center gap-4 mt-42">
                     <FadeUp>
                         <h1 className="text-[14rem] font-bold leading-none -mt-16">Superset</h1>
                     </FadeUp>
