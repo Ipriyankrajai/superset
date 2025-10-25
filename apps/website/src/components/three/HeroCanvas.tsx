@@ -51,7 +51,8 @@ const TEXT_CONFIG = {
 	ROUGHNESS: 0.25,
 	GLARE_DURATION: 2.0, // Duration of glare animation in seconds
 	GLARE_LIGHT_INTENSITY: 80, // Increased light intensity during glare
-	GLARE_DELAY: 0.3, // Delay before glare starts
+	GLARE_DELAY: 0.3, // Initial delay before first glare starts
+	GLARE_INTERVAL: 5.0, // Interval between glare animations in seconds
 	GLARE_START_X: -3, // Starting X position for light sweep
 	GLARE_END_X: 3, // Ending X position for light sweep
 	GLARE_Y: 0.5, // Y position during sweep
@@ -133,15 +134,20 @@ function calculateGlareProperties(
 		return { progress: 0, lightX: 0, lightY: 0, intensity: 0 };
 	}
 
-	const elapsed = (currentTime - startTime) / 1000; // Convert to seconds
+	const totalElapsed = (currentTime - startTime) / 1000; // Convert to seconds
+	const cycleTime = TEXT_CONFIG.GLARE_DURATION + TEXT_CONFIG.GLARE_INTERVAL;
+
+	// Calculate which cycle we're in and time within that cycle
+	const timeInCycle = totalElapsed % cycleTime;
 	const duration = TEXT_CONFIG.GLARE_DURATION;
 
-	if (elapsed < 0 || elapsed > duration) {
+	// Check if we're in the active glare portion of the cycle
+	if (timeInCycle > duration) {
 		return { progress: 0, lightX: 0, lightY: 0, intensity: 0 };
 	}
 
-	// Calculate progress (0 to 1)
-	const progress = elapsed / duration;
+	// Calculate progress (0 to 1) within the glare animation
+	const progress = timeInCycle / duration;
 
 	// Smooth ease-in-out for light movement
 	const easeProgress = (1 - Math.cos(progress * Math.PI)) / 2;
@@ -169,17 +175,13 @@ function LitBackground() {
 	const isVisible = useHeroVisibility();
 	const [glareStartTime, setGlareStartTime] = useState<number | null>(null);
 	const glarePropertiesRef = useRef({ progress: 0, lightX: 0, lightY: 0, intensity: 0 });
-	const glareTriggered = useRef(false);
 
-	// Trigger glare animation on mount
+	// Start glare animation cycle on mount
 	useEffect(() => {
-		if (!glareTriggered.current) {
-			const timer = setTimeout(() => {
-				setGlareStartTime(Date.now());
-				glareTriggered.current = true;
-			}, TEXT_CONFIG.GLARE_DELAY * 1000);
-			return () => clearTimeout(timer);
-		}
+		const timer = setTimeout(() => {
+			setGlareStartTime(Date.now());
+		}, TEXT_CONFIG.GLARE_DELAY * 1000);
+		return () => clearTimeout(timer);
 	}, []);
 
 	// Create shader material with uniforms
