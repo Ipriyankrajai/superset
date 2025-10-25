@@ -2,7 +2,7 @@
 
 import { Text } from "@react-three/drei";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { Suspense, useMemo, useRef } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import type { Mesh, PointLight } from "three";
 import * as THREE from "three";
 import { useHeroVisibility } from "../motion/HeroParallax";
@@ -49,6 +49,12 @@ const TEXT_CONFIG = {
 	COLOR: "#2c3539",
 	METALNESS: 0.85,
 	ROUGHNESS: 0.25,
+	GLARE_DURATION: 2.0, // Duration of glare animation in seconds
+	GLARE_LIGHT_INTENSITY: 80, // Increased light intensity during glare
+	GLARE_DELAY: 0.3, // Delay before glare starts
+	GLARE_START_X: -3, // Starting X position for light sweep
+	GLARE_END_X: 3, // Ending X position for light sweep
+	GLARE_Y: 0.5, // Y position during sweep
 } as const;
 
 const GEOMETRY_CONFIG = {
@@ -118,12 +124,63 @@ const waveFragmentShader = `
   }
 `;
 
+// Helper function to calculate glare properties based on elapsed time
+function calculateGlareProperties(
+	startTime: number | null,
+	currentTime: number,
+): { progress: number; lightX: number; lightY: number; intensity: number } {
+	if (!startTime) {
+		return { progress: 0, lightX: 0, lightY: 0, intensity: 0 };
+	}
+
+	const elapsed = (currentTime - startTime) / 1000; // Convert to seconds
+	const duration = TEXT_CONFIG.GLARE_DURATION;
+
+	if (elapsed < 0 || elapsed > duration) {
+		return { progress: 0, lightX: 0, lightY: 0, intensity: 0 };
+	}
+
+	// Calculate progress (0 to 1)
+	const progress = elapsed / duration;
+
+	// Smooth ease-in-out for light movement
+	const easeProgress = (1 - Math.cos(progress * Math.PI)) / 2;
+
+	// Calculate light position - sweep from left to right across the symbol
+	const lightX =
+		TEXT_CONFIG.GLARE_START_X +
+		easeProgress * (TEXT_CONFIG.GLARE_END_X - TEXT_CONFIG.GLARE_START_X);
+	const lightY = TEXT_CONFIG.GLARE_Y;
+
+	// Intensity peaks when light is over the symbol (center)
+	const distanceFromCenter = Math.abs(lightX);
+	const maxDistance = Math.abs(TEXT_CONFIG.GLARE_START_X);
+	const intensityMultiplier = 1 - Math.min(distanceFromCenter / maxDistance, 1);
+	const intensity = intensityMultiplier * TEXT_CONFIG.GLARE_LIGHT_INTENSITY;
+
+	return { progress, lightX, lightY, intensity };
+}
+
 function LitBackground() {
 	const meshRef = useRef<Mesh>(null);
 	const lightRef = useRef<PointLight>(null);
 	const textGroupRef = useRef<THREE.Group>(null);
 	const { viewport, camera } = useThree();
 	const isVisible = useHeroVisibility();
+	const [glareStartTime, setGlareStartTime] = useState<number | null>(null);
+	const glarePropertiesRef = useRef({ progress: 0, lightX: 0, lightY: 0, intensity: 0 });
+	const glareTriggered = useRef(false);
+
+	// Trigger glare animation on mount
+	useEffect(() => {
+		if (!glareTriggered.current) {
+			const timer = setTimeout(() => {
+				setGlareStartTime(Date.now());
+				glareTriggered.current = true;
+			}, TEXT_CONFIG.GLARE_DELAY * 1000);
+			return () => clearTimeout(timer);
+		}
+	}, []);
 
 	// Create shader material with uniforms
 	const shaderMaterial = useMemo(
@@ -149,16 +206,29 @@ function LitBackground() {
 		// Skip expensive operations when hero is not visible
 		if (!isVisible) return;
 
-		// Check if mouse has moved (not at default 0,0)
-		const hasMouseMoved = state.mouse.x !== 0 || state.mouse.y !== 0;
+		// Update glare properties based on animation progress
+		const glareProps = calculateGlareProperties(glareStartTime, Date.now());
+		glarePropertiesRef.current = glareProps;
 
-		// Convert normalized mouse coords to full viewport range, or use default position
-		const x = hasMouseMoved
-			? state.mouse.x * viewport.width
-			: viewport.width * LIGHT_CONFIG.DEFAULT_X_RATIO;
-		const y = hasMouseMoved
-			? state.mouse.y * viewport.height
-			: viewport.height * LIGHT_CONFIG.DEFAULT_Y_RATIO;
+		// Determine light position and intensity
+		let x: number, y: number, intensity: number;
+
+		if (glareProps.progress > 0) {
+			// During glare animation, override light position
+			x = glareProps.lightX;
+			y = glareProps.lightY;
+			intensity = LIGHT_CONFIG.INTENSITY + glareProps.intensity;
+		} else {
+			// Normal behavior after glare completes
+			const hasMouseMoved = state.mouse.x !== 0 || state.mouse.y !== 0;
+			x = hasMouseMoved
+				? state.mouse.x * viewport.width
+				: viewport.width * LIGHT_CONFIG.DEFAULT_X_RATIO;
+			y = hasMouseMoved
+				? state.mouse.y * viewport.height
+				: viewport.height * LIGHT_CONFIG.DEFAULT_Y_RATIO;
+			intensity = LIGHT_CONFIG.INTENSITY;
+		}
 
 		// Change color based on position - cooler palette (blue to cyan to purple)
 		const hue =
@@ -173,6 +243,7 @@ function LitBackground() {
 		if (lightRef.current) {
 			// Position light slightly in front of the plane
 			lightRef.current.position.set(x, y, LIGHT_CONFIG.Z_POSITION);
+			lightRef.current.intensity = intensity;
 			lightRef.current.color.setHSL(
 				hue / 360,
 				saturation / 100,
@@ -209,6 +280,9 @@ function LitBackground() {
 						saturation / 100,
 						lightness / 100,
 					);
+				}
+				if (material.uniforms.uLightIntensity) {
+					material.uniforms.uLightIntensity.value = intensity;
 				}
 			}
 		}
