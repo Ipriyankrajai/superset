@@ -1,5 +1,5 @@
 import { cn } from "@superset/ui/utils";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { electronTrpc } from "renderer/lib/electron-trpc";
 import { PROJECT_COLOR_DEFAULT } from "shared/constants/project-colors";
 
@@ -49,6 +49,13 @@ export function ProjectThumbnail({
 	// Determine which icon to show
 	const effectiveIcon = iconOverride || iconUrl;
 
+	// Reset error state when icon source changes
+	const prevIconRef = useRef(effectiveIcon);
+	if (prevIconRef.current !== effectiveIcon) {
+		setIconError(false);
+		prevIconRef.current = effectiveIcon;
+	}
+
 	// Only fetch GitHub avatar if no icon is set
 	const { data: avatarData } = electronTrpc.projects.getGitHubAvatar.useQuery(
 		{ id: projectId },
@@ -77,7 +84,7 @@ export function ProjectThumbnail({
 		return (
 			<div
 				className={cn(
-					"relative size-6 rounded overflow-hidden flex-shrink-0 bg-muted",
+					"relative size-6 rounded overflow-hidden shrink-0 bg-muted",
 					borderClasses,
 					className,
 				)}
@@ -98,7 +105,7 @@ export function ProjectThumbnail({
 		return (
 			<div
 				className={cn(
-					"relative size-6 rounded overflow-hidden flex-shrink-0 bg-muted",
+					"relative size-6 rounded overflow-hidden shrink-0 bg-muted",
 					borderClasses,
 					className,
 				)}
@@ -118,7 +125,7 @@ export function ProjectThumbnail({
 	return (
 		<div
 			className={cn(
-				"size-6 rounded flex items-center justify-center flex-shrink-0",
+				"size-6 rounded flex items-center justify-center shrink-0",
 				"bg-muted text-muted-foreground text-xs font-medium",
 				borderClasses,
 				className,
