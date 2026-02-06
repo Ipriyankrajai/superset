@@ -13,8 +13,8 @@ export interface TeardownResult {
 	output?: string;
 }
 
-function loadSetupConfig(mainRepoPath: string): SetupConfig | null {
-	const configPath = join(mainRepoPath, ".superset", "config.json");
+function readConfigFromPath(basePath: string): SetupConfig | null {
+	const configPath = join(basePath, ".superset", "config.json");
 
 	if (!existsSync(configPath)) {
 		return null;
@@ -37,12 +37,27 @@ function loadSetupConfig(mainRepoPath: string): SetupConfig | null {
 	}
 }
 
+function loadSetupConfig({
+	mainRepoPath,
+	worktreePath,
+}: {
+	mainRepoPath: string;
+	worktreePath?: string;
+}): SetupConfig | null {
+	if (worktreePath) {
+		const config = readConfigFromPath(worktreePath);
+		if (config) return config;
+	}
+
+	return readConfigFromPath(mainRepoPath);
+}
+
 export async function runTeardown(
 	mainRepoPath: string,
 	worktreePath: string,
 	workspaceName: string,
 ): Promise<TeardownResult> {
-	const config = loadSetupConfig(mainRepoPath);
+	const config = loadSetupConfig({ mainRepoPath, worktreePath });
 
 	if (!config?.teardown || config.teardown.length === 0) {
 		console.log(

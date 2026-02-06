@@ -27,9 +27,9 @@ export function copySupersetConfigToWorktree(
 	}
 }
 
-export function loadSetupConfig(mainRepoPath: string): SetupConfig | null {
+function readConfigFromPath(basePath: string): SetupConfig | null {
 	const configPath = join(
-		mainRepoPath,
+		basePath,
 		PROJECT_SUPERSET_DIR_NAME,
 		CONFIG_FILE_NAME,
 	);
@@ -53,4 +53,19 @@ export function loadSetupConfig(mainRepoPath: string): SetupConfig | null {
 		);
 		return null;
 	}
+}
+
+export function loadSetupConfig({
+	mainRepoPath,
+	worktreePath,
+}: {
+	mainRepoPath: string;
+	worktreePath?: string;
+}): SetupConfig | null {
+	if (worktreePath) {
+		const config = readConfigFromPath(worktreePath);
+		if (config) return config;
+	}
+
+	return readConfigFromPath(mainRepoPath);
 }
