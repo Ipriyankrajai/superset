@@ -208,8 +208,12 @@ export function setupPasteHandler(
 	xterm: XTerm,
 	options: PasteHandlerOptions = {},
 ): () => void {
-	const textarea = xterm.textarea;
-	if (!textarea) return () => {};
+	// ghostty-web handles paste on the container element (contenteditable div) via its
+	// InputHandler, which sends raw text without bracketed paste wrapping. We attach to
+	// the container's PARENT element with capture to intercept paste events during the
+	// capture phase, before ghostty-web's handlers on the container or textarea fire.
+	const parentEl = xterm.element?.parentElement;
+	if (!parentEl) return () => {};
 
 	let cancelActivePaste: (() => void) | null = null;
 
@@ -218,7 +222,7 @@ export function setupPasteHandler(
 		if (!text) return;
 
 		event.preventDefault();
-		event.stopImmediatePropagation();
+		event.stopPropagation();
 
 		options.onPaste?.(text);
 
@@ -310,12 +314,12 @@ export function setupPasteHandler(
 		pasteNext();
 	};
 
-	textarea.addEventListener("paste", handlePaste, { capture: true });
+	parentEl.addEventListener("paste", handlePaste, { capture: true });
 
 	return () => {
 		cancelActivePaste?.();
 		cancelActivePaste = null;
-		textarea.removeEventListener("paste", handlePaste, { capture: true });
+		parentEl.removeEventListener("paste", handlePaste, { capture: true });
 	};
 }
 
@@ -505,13 +509,16 @@ export function setupFocusListener(
 	xterm: XTerm,
 	onFocus: () => void,
 ): (() => void) | null {
-	const textarea = xterm.textarea;
-	if (!textarea) return null;
+	// ghostty-web's Terminal.focus() focuses the container element (contenteditable div),
+	// not the textarea. Use focusin on the container which fires when the container or
+	// any descendant (textarea) gains focus, and bubbles for reliable detection.
+	const element = xterm.element;
+	if (!element) return null;
 
-	textarea.addEventListener("focus", onFocus);
+	element.addEventListener("focusin", onFocus);
 
 	return () => {
-		textarea.removeEventListener("focus", onFocus);
+		element.removeEventListener("focusin", onFocus);
 	};
 }
 
