@@ -32,6 +32,18 @@ function isExecFileException(error: unknown): error is ExecFileException {
 	);
 }
 
+/**
+ * Common paths where homebrew installs binaries on macOS.
+ * Electron GUI apps launched from Finder/Dock get a minimal PATH that
+ * excludes these, so we append them as a fallback.
+ */
+const COMMON_MACOS_PATHS = [
+	"/opt/homebrew/bin",
+	"/opt/homebrew/sbin",
+	"/usr/local/bin",
+	"/usr/local/sbin",
+];
+
 async function getGitEnv(): Promise<Record<string, string>> {
 	const shellEnv = await getShellEnvironment();
 	const result: Record<string, string> = {};
@@ -45,6 +57,19 @@ async function getGitEnv(): Promise<Record<string, string>> {
 	const pathKey = process.platform === "win32" ? "Path" : "PATH";
 	if (shellEnv[pathKey]) {
 		result[pathKey] = shellEnv[pathKey];
+	}
+
+	// On macOS, ensure common homebrew paths are included.
+	// If getShellEnvironment() fell back to process.env (e.g. shell spawn timed out),
+	// the PATH will be minimal and miss tools like git-lfs installed via homebrew.
+	if (process.platform === "darwin" && result[pathKey]) {
+		const existingPaths = result[pathKey].split(":");
+		const missingPaths = COMMON_MACOS_PATHS.filter(
+			(p) => !existingPaths.includes(p),
+		);
+		if (missingPaths.length > 0) {
+			result[pathKey] = [...existingPaths, ...missingPaths].join(":");
+		}
 	}
 
 	return result;
@@ -440,22 +465,23 @@ export async function createWorktree(
 	startPoint = "origin/main",
 ): Promise<void> {
 	const usesLfs = await repoUsesLfs(mainRepoPath);
+	const env = await getGitEnv();
+
+	// Pre-check: verify git-lfs availability before attempting worktree creation.
+	// This is outside the try block so the error message isn't caught and re-wrapped.
+	if (usesLfs) {
+		const lfsAvailable = await checkGitLfsAvailable(env);
+		if (!lfsAvailable) {
+			throw new Error(
+				`Failed to create worktree: This repository uses Git LFS, but git-lfs was not found. ` +
+					`Please install git-lfs (e.g., 'brew install git-lfs') and run 'git lfs install'.`,
+			);
+		}
+	}
 
 	try {
 		const parentDir = join(worktreePath, "..");
 		await mkdir(parentDir, { recursive: true });
-
-		const env = await getGitEnv();
-
-		if (usesLfs) {
-			const lfsAvailable = await checkGitLfsAvailable(env);
-			if (!lfsAvailable) {
-				throw new Error(
-					`This repository uses Git LFS, but git-lfs was not found. ` +
-						`Please install git-lfs (e.g., 'brew install git-lfs') and run 'git lfs install'.`,
-				);
-			}
-		}
 
 		await execFileAsync(
 			"git",
@@ -517,8 +543,9 @@ export async function createWorktree(
 		if (isLfsError) {
 			console.error(`Git LFS error during worktree creation: ${errorMessage}`);
 			throw new Error(
-				`Failed to create worktree: This repository uses Git LFS, but git-lfs was not found or failed. ` +
-					`Please install git-lfs (e.g., 'brew install git-lfs') and run 'git lfs install'.`,
+				`Failed to create worktree: Git LFS error. ` +
+					`Please ensure git-lfs is installed (e.g., 'brew install git-lfs') and initialized ('git lfs install').\n` +
+					`Detail: ${sanitizeGitError(errorMessage)}`,
 			);
 		}
 
@@ -541,22 +568,23 @@ export async function createWorktreeFromExistingBranch({
 	worktreePath: string;
 }): Promise<void> {
 	const usesLfs = await repoUsesLfs(mainRepoPath);
+	const env = await getGitEnv();
+
+	// Pre-check: verify git-lfs availability before attempting worktree creation.
+	// This is outside the try block so the error message isn't caught and re-wrapped.
+	if (usesLfs) {
+		const lfsAvailable = await checkGitLfsAvailable(env);
+		if (!lfsAvailable) {
+			throw new Error(
+				`Failed to create worktree: This repository uses Git LFS, but git-lfs was not found. ` +
+					`Please install git-lfs (e.g., 'brew install git-lfs') and run 'git lfs install'.`,
+			);
+		}
+	}
 
 	try {
 		const parentDir = join(worktreePath, "..");
 		await mkdir(parentDir, { recursive: true });
-
-		const env = await getGitEnv();
-
-		if (usesLfs) {
-			const lfsAvailable = await checkGitLfsAvailable(env);
-			if (!lfsAvailable) {
-				throw new Error(
-					`This repository uses Git LFS, but git-lfs was not found. ` +
-						`Please install git-lfs (e.g., 'brew install git-lfs') and run 'git lfs install'.`,
-				);
-			}
-		}
 
 		// First, check if the branch exists locally
 		const git = simpleGit(mainRepoPath);
@@ -641,8 +669,9 @@ export async function createWorktreeFromExistingBranch({
 		if (isLfsError) {
 			console.error(`Git LFS error during worktree creation: ${errorMessage}`);
 			throw new Error(
-				`Failed to create worktree: This repository uses Git LFS, but git-lfs was not found or failed. ` +
-					`Please install git-lfs (e.g., 'brew install git-lfs') and run 'git lfs install'.`,
+				`Failed to create worktree: Git LFS error. ` +
+					`Please ensure git-lfs is installed (e.g., 'brew install git-lfs') and initialized ('git lfs install').\n` +
+					`Detail: ${sanitizeGitError(errorMessage)}`,
 			);
 		}
 
