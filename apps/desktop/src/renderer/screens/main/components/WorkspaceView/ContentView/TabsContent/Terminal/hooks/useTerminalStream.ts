@@ -5,6 +5,9 @@ import { useTabsStore } from "renderer/stores/tabs/store";
 import { DEBUG_TERMINAL } from "../config";
 import type { TerminalExitReason, TerminalStreamEvent } from "../types";
 
+/** Max bytes to buffer for a hidden terminal before flushing directly to xterm */
+const MAX_BACKGROUND_BUFFER_BYTES = 5 * 1024 * 1024; // 5 MB
+
 export interface UseTerminalStreamOptions {
 	paneId: string;
 	xtermRef: React.MutableRefObject<XTerm | null>;
@@ -12,6 +15,7 @@ export interface UseTerminalStreamOptions {
 	isExitedRef: React.MutableRefObject<boolean>;
 	wasKilledByUserRef: React.MutableRefObject<boolean>;
 	pendingEventsRef: React.MutableRefObject<TerminalStreamEvent[]>;
+	isTabActiveRef: React.MutableRefObject<boolean>;
 	setExitStatus: (status: "killed" | "exited" | null) => void;
 	setConnectionError: (error: string | null) => void;
 	updateModesFromData: (data: string) => void;
@@ -29,10 +33,17 @@ export interface UseTerminalStreamReturn {
 		xterm: XTerm,
 	) => void;
 	handleStreamData: (event: TerminalStreamEvent) => void;
+	flushBackgroundBuffer: () => void;
 }
 
 /**
  * Hook to handle terminal stream events (data, exit, disconnect, error).
+ *
+ * When the terminal's tab is not active (`isTabActiveRef.current === false`),
+ * incoming data events are buffered instead of written to xterm. This avoids
+ * wasting GPU cycles rendering to a hidden WebGL canvas. The buffer is flushed
+ * either when the tab becomes visible (via `flushBackgroundBuffer`) or inline
+ * when the next data event arrives after the tab is activated.
  */
 export function useTerminalStream({
 	paneId,
@@ -41,6 +52,7 @@ export function useTerminalStream({
 	isExitedRef,
 	wasKilledByUserRef,
 	pendingEventsRef,
+	isTabActiveRef,
 	setExitStatus,
 	setConnectionError,
 	updateModesFromData,
@@ -49,11 +61,34 @@ export function useTerminalStream({
 	const setPaneStatus = useTabsStore((s) => s.setPaneStatus);
 	const firstStreamDataReceivedRef = useRef(false);
 
+	// Background buffer for data received while the tab is hidden
+	const backgroundBufferRef = useRef<string[]>([]);
+	const backgroundBufferBytesRef = useRef(0);
+
 	// Refs to use latest values in callbacks
 	const updateModesRef = useRef(updateModesFromData);
 	updateModesRef.current = updateModesFromData;
 	const updateCwdRef = useRef(updateCwdFromData);
 	updateCwdRef.current = updateCwdFromData;
+
+	const flushBackgroundBuffer = useCallback(() => {
+		const xterm = xtermRef.current;
+		if (!xterm || backgroundBufferRef.current.length === 0) return;
+
+		const data = backgroundBufferRef.current.join("");
+		backgroundBufferRef.current = [];
+		backgroundBufferBytesRef.current = 0;
+
+		updateModesRef.current(data);
+		xterm.write(data);
+		updateCwdRef.current(data);
+
+		if (DEBUG_TERMINAL) {
+			console.log(
+				`[Terminal] Flushed background buffer: ${paneId}, ${data.length} bytes`,
+			);
+		}
+	}, [paneId, xtermRef]);
 
 	const handleTerminalExit = useCallback(
 		(exitCode: number, xterm: XTerm, reason?: TerminalExitReason) => {
@@ -149,6 +184,35 @@ export function useTerminalStream({
 						`[Terminal] First stream data received: ${paneId}, ${event.data.length} bytes`,
 					);
 				}
+
+				// When tab is hidden, buffer data to avoid wasting GPU on hidden canvas.
+				// Modes and CWD are still tracked so state stays consistent.
+				if (!isTabActiveRef.current) {
+					updateModesRef.current(event.data);
+					updateCwdRef.current(event.data);
+
+					backgroundBufferRef.current.push(event.data);
+					backgroundBufferBytesRef.current += event.data.length;
+
+					// On overflow, flush buffer to xterm to prevent unbounded memory growth.
+					// This is a graceful degradation — hidden xterm still processes writes correctly.
+					if (backgroundBufferBytesRef.current > MAX_BACKGROUND_BUFFER_BYTES) {
+						const buffered = backgroundBufferRef.current.join("");
+						backgroundBufferRef.current = [];
+						backgroundBufferBytesRef.current = 0;
+						xterm.write(buffered);
+					}
+					return;
+				}
+
+				// Tab is visible — flush any buffered data before writing new data
+				if (backgroundBufferRef.current.length > 0) {
+					const buffered = backgroundBufferRef.current.join("");
+					backgroundBufferRef.current = [];
+					backgroundBufferBytesRef.current = 0;
+					xterm.write(buffered);
+				}
+
 				updateModesRef.current(event.data);
 				xterm.write(event.data);
 				updateCwdRef.current(event.data);
@@ -166,6 +230,7 @@ export function useTerminalStream({
 			paneId,
 			xtermRef,
 			isStreamReadyRef,
+			isTabActiveRef,
 			pendingEventsRef,
 			handleTerminalExit,
 			handleStreamError,
@@ -177,5 +242,6 @@ export function useTerminalStream({
 		handleTerminalExit,
 		handleStreamError,
 		handleStreamData,
+		flushBackgroundBuffer,
 	};
 }

@@ -42,6 +42,14 @@ export const Terminal = ({ paneId, tabId, workspaceId }: TerminalProps) => {
 	const paneInitialCwd = pane?.initialCwd;
 	const clearPaneInitialData = useTabsStore((s) => s.clearPaneInitialData);
 
+	// Derive whether this terminal's tab is currently the active (visible) tab.
+	// Used to buffer stream writes when hidden and flush + refit on becoming visible.
+	const isTabActive = useTabsStore(
+		(s) => s.activeTabIds[workspaceId] === tabId,
+	);
+	const isTabActiveRef = useRef(isTabActive);
+	isTabActiveRef.current = isTabActive;
+
 	const { data: workspaceData } = electronTrpc.workspaces.get.useQuery(
 		{ id: workspaceId },
 		{ staleTime: 30_000 },
@@ -222,19 +230,24 @@ export const Terminal = ({ paneId, tabId, workspaceId }: TerminalProps) => {
 	connectionErrorRef.current = connectionError;
 
 	// Stream handling
-	const { handleTerminalExit, handleStreamError, handleStreamData } =
-		useTerminalStream({
-			paneId,
-			xtermRef,
-			isStreamReadyRef,
-			isExitedRef,
-			wasKilledByUserRef,
-			pendingEventsRef,
-			setExitStatus,
-			setConnectionError,
-			updateModesFromData,
-			updateCwdFromData,
-		});
+	const {
+		handleTerminalExit,
+		handleStreamError,
+		handleStreamData,
+		flushBackgroundBuffer,
+	} = useTerminalStream({
+		paneId,
+		xtermRef,
+		isStreamReadyRef,
+		isExitedRef,
+		wasKilledByUserRef,
+		pendingEventsRef,
+		isTabActiveRef,
+		setExitStatus,
+		setConnectionError,
+		updateModesFromData,
+		updateCwdFromData,
+	});
 
 	// Populate handler refs for flushPendingEvents to use
 	handleTerminalExitRef.current = handleTerminalExit;
@@ -245,6 +258,20 @@ export const Terminal = ({ paneId, tabId, workspaceId }: TerminalProps) => {
 		onData: handleStreamData,
 		enabled: true,
 	});
+
+	// When tab becomes visible: flush buffered data and re-fit terminal
+	// in case the container was resized while hidden.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: resizeRef is a stable mutation ref
+	useEffect(() => {
+		if (!isTabActive) return;
+		flushBackgroundBuffer();
+		const fitAddon = fitAddonRef.current;
+		const xterm = xtermRef.current;
+		if (fitAddon && xterm) {
+			fitAddon.fit();
+			resizeRef.current({ paneId, cols: xterm.cols, rows: xterm.rows });
+		}
+	}, [isTabActive, paneId, flushBackgroundBuffer]);
 
 	const { isSearchOpen, setIsSearchOpen } = useTerminalHotkeys({
 		isFocused,
