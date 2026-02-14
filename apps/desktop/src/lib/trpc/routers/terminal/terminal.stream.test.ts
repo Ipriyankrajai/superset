@@ -22,6 +22,28 @@ class MockTerminalRuntime extends EventEmitter {
 	management: MockManagement;
 	capabilities = { persistent: true, coldRestore: true };
 	killCalls: Array<{ paneId: string }> = [];
+	replayEvents = new Map<
+		string,
+		Array<
+			| { type: "data"; data: string; seq: number; emittedAtMs: number }
+			| {
+					type: "exit";
+					exitCode: number;
+					signal?: number;
+					reason?: "killed" | "exited" | "error";
+					seq: number;
+					emittedAtMs: number;
+			  }
+			| { type: "disconnect"; reason: string; seq: number; emittedAtMs: number }
+			| {
+					type: "error";
+					error: string;
+					code?: string;
+					seq: number;
+					emittedAtMs: number;
+			  }
+		>
+	>();
 
 	constructor() {
 		super();
@@ -34,6 +56,11 @@ class MockTerminalRuntime extends EventEmitter {
 
 	async kill(params: { paneId: string }) {
 		this.killCalls.push(params);
+	}
+
+	getReplayEvents(params: { paneId: string; sinceSeq: number }) {
+		const events = this.replayEvents.get(params.paneId) ?? [];
+		return events.filter((event) => event.seq > params.sinceSeq);
 	}
 
 	detachAllListeners() {
@@ -221,6 +248,41 @@ describe("terminal.stream", () => {
 
 		expect(didComplete).toBe(false);
 		expect(events.map((e) => e.type)).toEqual(["error"]);
+
+		subscription.unsubscribe();
+	});
+
+	it("replays buffered events when sinceSeq is provided", async () => {
+		mockTerminal = new MockTerminalRuntime();
+		mockTerminal.replayEvents.set("pane-replay", [
+			{
+				type: "data",
+				data: "older\r\n",
+				seq: 1,
+				emittedAtMs: 1000,
+			},
+			{
+				type: "data",
+				data: "newer\r\n",
+				seq: 2,
+				emittedAtMs: 1001,
+			},
+		]);
+
+		const router = createTerminalRouter();
+		const caller = router.createCaller({} as never);
+		const stream$ = await caller.stream({ paneId: "pane-replay", sinceSeq: 1 });
+
+		const events: Array<{ type: string; data?: string; seq?: number }> = [];
+		const subscription = stream$.subscribe({
+			next: (event) => {
+				events.push(event);
+			},
+		});
+
+		expect(events).toEqual([
+			expect.objectContaining({ type: "data", data: "newer\r\n", seq: 2 }),
+		]);
 
 		subscription.unsubscribe();
 	});

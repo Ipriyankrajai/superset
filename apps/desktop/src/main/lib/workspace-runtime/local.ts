@@ -95,6 +95,10 @@ class LocalTerminalRuntime implements TerminalRuntime {
 		return this.backend.getSession(paneId);
 	};
 
+	getReplayEvents: TerminalRuntime["getReplayEvents"] = (params) => {
+		return this.backend.getReplayEvents(params);
+	};
+
 	// ===========================================================================
 	// Workspace Operations (delegate to backend)
 	// ===========================================================================

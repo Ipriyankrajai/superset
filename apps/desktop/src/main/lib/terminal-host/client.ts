@@ -141,10 +141,27 @@ interface PendingRequest {
 // =============================================================================
 
 export interface TerminalHostClientEvents {
-	data: (sessionId: string, data: string) => void;
-	exit: (sessionId: string, exitCode: number, signal?: number) => void;
+	data: (
+		sessionId: string,
+		data: string,
+		seq?: number,
+		emittedAtMs?: number,
+	) => void;
+	exit: (
+		sessionId: string,
+		exitCode: number,
+		signal?: number,
+		seq?: number,
+		emittedAtMs?: number,
+	) => void;
 	/** Terminal-specific error (e.g., write queue full - paste dropped) */
-	terminalError: (sessionId: string, error: string, code?: string) => void;
+	terminalError: (
+		sessionId: string,
+		error: string,
+		code?: string,
+		seq?: number,
+		emittedAtMs?: number,
+	) => void;
 	connected: () => void;
 	disconnected: () => void;
 	error: (error: Error) => void;
@@ -593,7 +610,13 @@ export class TerminalHostClient extends EventEmitter {
 
 			switch (eventPayload.type) {
 				case "data":
-					this.emit("data", sessionId, eventPayload.data);
+					this.emit(
+						"data",
+						sessionId,
+						eventPayload.data,
+						eventPayload.seq,
+						eventPayload.emittedAtMs,
+					);
 					break;
 				case "exit":
 					this.emit(
@@ -601,6 +624,8 @@ export class TerminalHostClient extends EventEmitter {
 						sessionId,
 						eventPayload.exitCode,
 						eventPayload.signal,
+						eventPayload.seq,
+						eventPayload.emittedAtMs,
 					);
 					break;
 				case "error":
@@ -611,6 +636,8 @@ export class TerminalHostClient extends EventEmitter {
 						sessionId,
 						eventPayload.error,
 						eventPayload.code,
+						eventPayload.seq,
+						eventPayload.emittedAtMs,
 					);
 					break;
 			}

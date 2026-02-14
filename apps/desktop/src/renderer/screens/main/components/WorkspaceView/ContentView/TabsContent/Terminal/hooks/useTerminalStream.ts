@@ -25,6 +25,7 @@ export interface UseTerminalStreamOptions {
 	setConnectionError: (error: string | null) => void;
 	updateModesFromData: (data: string) => void;
 	updateCwdFromData: (data: string) => void;
+	onStreamSeq?: (seq: number) => void;
 }
 
 export interface UseTerminalStreamReturn {
@@ -54,6 +55,7 @@ export function useTerminalStream({
 	setConnectionError,
 	updateModesFromData,
 	updateCwdFromData,
+	onStreamSeq,
 }: UseTerminalStreamOptions): UseTerminalStreamReturn {
 	const setPaneStatus = useTabsStore((s) => s.setPaneStatus);
 	const streamMountToken = useId();
@@ -234,8 +236,9 @@ export function useTerminalStream({
 			console.warn("[Terminal] stream error:", message);
 
 			if (
-				event.code === "WRITE_FAILED" &&
-				event.error?.includes("Session not found")
+				event.code === "SESSION_NOT_FOUND" ||
+				(event.code === "WRITE_FAILED" &&
+					event.error?.includes("Session not found"))
 			) {
 				setConnectionError("Session lost - click to reconnect");
 				return;
@@ -251,7 +254,11 @@ export function useTerminalStream({
 
 			toast.error("Terminal error", { description: message });
 
-			if (event.code === "WRITE_QUEUE_FULL" || event.code === "WRITE_FAILED") {
+			if (
+				event.code === "WRITE_QUEUE_FULL" ||
+				event.code === "WRITE_DROPPED" ||
+				event.code === "WRITE_FAILED"
+			) {
 				xterm.writeln(`\r\n[Terminal] ${message}`);
 			} else {
 				setConnectionError(message);
@@ -293,6 +300,9 @@ export function useTerminalStream({
 			}
 
 			// Process events when stream is ready
+			if (typeof event.seq === "number") {
+				onStreamSeq?.(event.seq);
+			}
 			if (event.type === "data") {
 				enqueueData(event.data);
 			} else if (event.type === "exit") {
@@ -319,6 +329,7 @@ export function useTerminalStream({
 			setConnectionError,
 			enqueueData,
 			flushDataBatch,
+			onStreamSeq,
 		],
 	);
 

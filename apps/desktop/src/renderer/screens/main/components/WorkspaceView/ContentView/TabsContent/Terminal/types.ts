@@ -7,15 +7,23 @@ export interface TerminalProps {
 export type TerminalExitReason = "killed" | "exited" | "error";
 
 export type TerminalStreamEvent =
-	| { type: "data"; data: string }
+	| { type: "data"; data: string; seq?: number; emittedAtMs?: number }
 	| {
 			type: "exit";
 			exitCode: number;
 			signal?: number;
 			reason?: TerminalExitReason;
+			seq?: number;
+			emittedAtMs?: number;
 	  }
-	| { type: "disconnect"; reason: string }
-	| { type: "error"; error: string; code?: string };
+	| { type: "disconnect"; reason: string; seq?: number; emittedAtMs?: number }
+	| {
+			type: "error";
+			error: string;
+			code?: string;
+			seq?: number;
+			emittedAtMs?: number;
+	  };
 
 export type CreateOrAttachResult = {
 	wasRecovered: boolean;
@@ -25,6 +33,9 @@ export type CreateOrAttachResult = {
 	isColdRestore?: boolean;
 	previousCwd?: string;
 	snapshot?: {
+		snapshotVersion?: number;
+		watermarkSeq?: number;
+		partial?: boolean;
 		snapshotAnsi: string;
 		rehydrateSequences: string;
 		cwd: string | null;

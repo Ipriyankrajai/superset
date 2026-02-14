@@ -97,6 +97,7 @@ export class Session {
 	private subprocessStdinQueuedBytes = 0;
 	private subprocessStdinDrainArmed = false;
 	private ptyPid: number | null = null;
+	private eventSeq = 0;
 
 	// Promise that resolves when PTY is ready to accept writes
 	private ptyReadyPromise: Promise<void>;
@@ -708,7 +709,13 @@ export class Session {
 			);
 		}
 
-		return this.emulator.getSnapshotAsync();
+		const snapshot = await this.emulator.getSnapshotAsync();
+		return {
+			...snapshot,
+			snapshotVersion: snapshot.snapshotVersion ?? 1,
+			watermarkSeq: this.eventSeq,
+			partial: !reachedBoundary,
+		};
 	}
 
 	/**
@@ -879,11 +886,19 @@ export class Session {
 		eventType: string,
 		payload: TerminalDataEvent | TerminalExitEvent | TerminalErrorEvent,
 	): void {
+		const seq = ++this.eventSeq;
+		const emittedAtMs = Date.now();
+		const payloadWithMeta = {
+			...payload,
+			seq,
+			emittedAtMs,
+		} as TerminalDataEvent | TerminalExitEvent | TerminalErrorEvent;
+
 		const event: IpcEvent = {
 			type: "event",
 			event: eventType,
 			sessionId: this.sessionId,
-			payload,
+			payload: payloadWithMeta,
 		};
 
 		const message = `${JSON.stringify(event)}\n`;

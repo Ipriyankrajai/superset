@@ -77,6 +77,12 @@ export const DEFAULT_MODES: TerminalModes = {
  * Contains everything needed to restore terminal state in the renderer.
  */
 export interface TerminalSnapshot {
+	/** Snapshot schema/version for forward-compatible restore logic */
+	snapshotVersion?: number;
+	/** Stream sequence watermark included in this snapshot */
+	watermarkSeq?: number;
+	/** True when snapshot capture timed out before fully reaching boundary */
+	partial?: boolean;
 	/** Serialized screen state (ANSI sequences to reproduce screen) */
 	snapshotAnsi: string;
 	/** Control sequences to restore input-affecting modes */
@@ -312,6 +318,10 @@ export interface IpcEvent {
 export interface TerminalDataEvent {
 	type: "data";
 	data: string;
+	/** Monotonic per-session event sequence */
+	seq?: number;
+	/** Epoch timestamp for when daemon emitted this event */
+	emittedAtMs?: number;
 }
 
 /**
@@ -321,6 +331,10 @@ export interface TerminalExitEvent {
 	type: "exit";
 	exitCode: number;
 	signal?: number;
+	/** Monotonic per-session event sequence */
+	seq?: number;
+	/** Epoch timestamp for when daemon emitted this event */
+	emittedAtMs?: number;
 }
 
 /**
@@ -330,7 +344,18 @@ export interface TerminalErrorEvent {
 	type: "error";
 	error: string;
 	/** Error code for programmatic handling */
-	code?: "WRITE_QUEUE_FULL" | "SUBPROCESS_ERROR" | "WRITE_FAILED" | "UNKNOWN";
+	code?:
+		| "WRITE_QUEUE_FULL"
+		| "SUBPROCESS_ERROR"
+		| "WRITE_FAILED"
+		| "WRITE_DROPPED"
+		| "SNAPSHOT_PARTIAL"
+		| "SESSION_NOT_FOUND"
+		| "UNKNOWN";
+	/** Monotonic per-session event sequence */
+	seq?: number;
+	/** Epoch timestamp for when daemon emitted this event */
+	emittedAtMs?: number;
 }
 
 export type TerminalEvent =

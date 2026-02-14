@@ -82,6 +82,7 @@ export const Terminal = ({ paneId, tabId, workspaceId }: TerminalProps) => {
 	const setPaneName = useTabsStore((s) => s.setPaneName);
 	const focusedPaneId = useTabsStore((s) => s.focusedPaneIds[tabId]);
 	const terminalTheme = useTerminalTheme();
+	const lastStreamSeqRef = useRef(0);
 
 	// Terminal connection state and mutations
 	const {
@@ -231,6 +232,9 @@ export const Terminal = ({ paneId, tabId, workspaceId }: TerminalProps) => {
 			setConnectionError,
 			updateModesFromData,
 			updateCwdFromData,
+			onStreamSeq: (seq) => {
+				lastStreamSeqRef.current = Math.max(lastStreamSeqRef.current, seq);
+			},
 		});
 
 	// Populate handler refs for flushPendingEvents to use
@@ -238,10 +242,17 @@ export const Terminal = ({ paneId, tabId, workspaceId }: TerminalProps) => {
 	handleStreamErrorRef.current = handleStreamError;
 
 	// Stream subscription
-	electronTrpc.terminal.stream.useSubscription(paneId, {
+	electronTrpc.terminal.stream.useSubscription(
+		{
+			paneId,
+			sinceSeq:
+				lastStreamSeqRef.current > 0 ? lastStreamSeqRef.current : undefined,
+		},
+		{
 		onData: handleStreamData,
 		enabled: true,
-	});
+		},
+	);
 
 	const { isSearchOpen, setIsSearchOpen } = useTerminalHotkeys({
 		isFocused,

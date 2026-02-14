@@ -275,6 +275,9 @@ export class HeadlessEmulator {
 		}
 
 		return {
+			snapshotVersion: 1,
+			watermarkSeq: 0,
+			partial: false,
 			snapshotAnsi,
 			rehydrateSequences,
 			cwd: this.cwd,

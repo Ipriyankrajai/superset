@@ -31,6 +31,8 @@ export type TerminalExitReason = "killed" | "exited" | "error";
 export interface TerminalDataEvent {
 	type: "data";
 	data: string;
+	seq?: number;
+	emittedAtMs?: number;
 }
 
 export interface TerminalExitEvent {
@@ -38,6 +40,8 @@ export interface TerminalExitEvent {
 	exitCode: number;
 	signal?: number;
 	reason?: TerminalExitReason;
+	seq?: number;
+	emittedAtMs?: number;
 }
 
 export type TerminalEvent = TerminalDataEvent | TerminalExitEvent;
@@ -65,6 +69,9 @@ export interface SessionResult {
 	previousCwd?: string;
 	/** Snapshot from daemon (if using daemon mode) */
 	snapshot?: {
+		snapshotVersion?: number;
+		watermarkSeq?: number;
+		partial?: boolean;
 		snapshotAnsi: string;
 		rehydrateSequences: string;
 		cwd: string | null;

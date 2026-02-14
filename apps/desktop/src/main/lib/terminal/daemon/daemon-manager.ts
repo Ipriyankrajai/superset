@@ -19,11 +19,37 @@ import {
 	DEBUG_TERMINAL,
 	MAX_KILLED_SESSION_TOMBSTONES,
 	MAX_SCROLLBACK_BYTES,
+	MAX_STREAM_REPLAY_BYTES,
+	MAX_STREAM_REPLAY_EVENTS,
 	SESSION_CLEANUP_DELAY_MS,
 } from "./constants";
 import { HistoryManager } from "./history-manager";
 import { PrioritySemaphore } from "./priority-semaphore";
 import type { ColdRestoreInfo, SessionInfo } from "./types";
+
+type ReplayableStreamEvent =
+	| { type: "data"; data: string; seq: number; emittedAtMs: number }
+	| {
+			type: "exit";
+			exitCode: number;
+			signal?: number;
+			reason?: "killed" | "exited" | "error";
+			seq: number;
+			emittedAtMs: number;
+	  }
+	| { type: "disconnect"; reason: string; seq: number; emittedAtMs: number }
+	| {
+			type: "error";
+			error: string;
+			code?: string;
+			seq: number;
+			emittedAtMs: number;
+	  };
+
+interface ReplayEventRecord {
+	event: ReplayableStreamEvent;
+	sizeBytes: number;
+}
 
 export class DaemonTerminalManager extends EventEmitter {
 	private client!: TerminalHostClient;
@@ -40,6 +66,9 @@ export class DaemonTerminalManager extends EventEmitter {
 
 	private coldRestoreInfo = new Map<string, ColdRestoreInfo>();
 	private cleanupTimeouts = new Map<string, NodeJS.Timeout>();
+	private streamReplayByPane = new Map<string, ReplayEventRecord[]>();
+	private streamReplayBytesByPane = new Map<string, number>();
+	private streamSeqByPane = new Map<string, number>();
 
 	constructor() {
 		super();
@@ -161,8 +190,20 @@ export class DaemonTerminalManager extends EventEmitter {
 	}
 
 	private setupClientEventHandlers(): void {
-		this.client.on("data", (sessionId: string, data: string) => {
+		this.client.on(
+			"data",
+			(
+				sessionId: string,
+				data: string,
+				incomingSeq?: number,
+				emittedAtMs?: number,
+			) => {
 			const paneId = sessionId;
+			const seq = this.assignStreamSeq({
+				paneId,
+				incomingSeq,
+			});
+			const timestamp = emittedAtMs ?? Date.now();
 			if (DEBUG_TERMINAL) {
 				const listenerCount = this.listenerCount(`data:${paneId}`);
 				console.log(
@@ -179,13 +220,32 @@ export class DaemonTerminalManager extends EventEmitter {
 			this.historyManager.writeToHistory(paneId, data, () =>
 				this.sessions.get(paneId),
 			);
-			this.emit(`data:${paneId}`, data);
-		});
+			const event: ReplayableStreamEvent = {
+				type: "data",
+				data,
+				seq,
+				emittedAtMs: timestamp,
+			};
+			this.appendReplayEvent(paneId, event);
+			this.emit(`data:${paneId}`, data, seq, timestamp);
+			},
+		);
 
 		this.client.on(
 			"exit",
-			(sessionId: string, exitCode: number, signal?: number) => {
+			(
+				sessionId: string,
+				exitCode: number,
+				signal?: number,
+				incomingSeq?: number,
+				emittedAtMs?: number,
+			) => {
 				const paneId = sessionId;
+				const seq = this.assignStreamSeq({
+					paneId,
+					incomingSeq,
+				});
+				const timestamp = emittedAtMs ?? Date.now();
 				this.daemonAliveSessionIds.delete(paneId);
 
 				const session = this.sessions.get(paneId);
@@ -202,12 +262,22 @@ export class DaemonTerminalManager extends EventEmitter {
 				if (session) {
 					session.exitReason = reason;
 				}
-				this.emit(`exit:${paneId}`, exitCode, signal, reason);
+				const event: ReplayableStreamEvent = {
+					type: "exit",
+					exitCode,
+					signal,
+					reason,
+					seq,
+					emittedAtMs: timestamp,
+				};
+				this.appendReplayEvent(paneId, event);
+				this.emit(`exit:${paneId}`, exitCode, signal, reason, seq, timestamp);
 				this.emit("terminalExit", { paneId, exitCode, signal, reason });
 
 				const timeoutId = setTimeout(() => {
 					this.sessions.delete(paneId);
 					this.cleanupTimeouts.delete(paneId);
+					this.clearReplayForPane(paneId);
 				}, SESSION_CLEANUP_DELAY_MS);
 				timeoutId.unref();
 				this.cleanupTimeouts.set(paneId, timeoutId);
@@ -226,9 +296,20 @@ export class DaemonTerminalManager extends EventEmitter {
 			this.daemonSessionIdsHydrated = false;
 			for (const [paneId, session] of this.sessions.entries()) {
 				if (session.isAlive) {
+					const seq = this.nextStreamSeq(paneId);
+					const emittedAtMs = Date.now();
+					const event: ReplayableStreamEvent = {
+						type: "disconnect",
+						reason: "Connection to terminal daemon lost",
+						seq,
+						emittedAtMs,
+					};
+					this.appendReplayEvent(paneId, event);
 					this.emit(
 						`disconnect:${paneId}`,
 						"Connection to terminal daemon lost",
+						seq,
+						emittedAtMs,
 					);
 				}
 			}
@@ -240,15 +321,35 @@ export class DaemonTerminalManager extends EventEmitter {
 			this.daemonSessionIdsHydrated = false;
 			for (const [paneId, session] of this.sessions.entries()) {
 				if (session.isAlive) {
-					this.emit(`disconnect:${paneId}`, error.message);
+					const seq = this.nextStreamSeq(paneId);
+					const emittedAtMs = Date.now();
+					const event: ReplayableStreamEvent = {
+						type: "disconnect",
+						reason: error.message,
+						seq,
+						emittedAtMs,
+					};
+					this.appendReplayEvent(paneId, event);
+					this.emit(`disconnect:${paneId}`, error.message, seq, emittedAtMs);
 				}
 			}
 		});
 
 		this.client.on(
 			"terminalError",
-			(sessionId: string, error: string, code?: string) => {
+			(
+				sessionId: string,
+				error: string,
+				code?: string,
+				incomingSeq?: number,
+				emittedAtMs?: number,
+			) => {
 				const paneId = sessionId;
+				const seq = this.assignStreamSeq({
+					paneId,
+					incomingSeq,
+				});
+				const timestamp = emittedAtMs ?? Date.now();
 				console.error(
 					`[DaemonTerminalManager] Terminal error for ${paneId}: ${code ?? "UNKNOWN"}: ${error}`,
 				);
@@ -264,9 +365,38 @@ export class DaemonTerminalManager extends EventEmitter {
 					);
 				}
 
-				this.emit(`error:${paneId}`, { error, code });
+				const event: ReplayableStreamEvent = {
+					type: "error",
+					error,
+					code,
+					seq,
+					emittedAtMs: timestamp,
+				};
+				this.appendReplayEvent(paneId, event);
+				this.emit(`error:${paneId}`, {
+					error,
+					code,
+					seq,
+					emittedAtMs: timestamp,
+				});
 			},
 		);
+	}
+
+	getReplayEvents({
+		paneId,
+		sinceSeq,
+		limit = MAX_STREAM_REPLAY_EVENTS,
+	}: {
+		paneId: string;
+		sinceSeq: number;
+		limit?: number;
+	}): ReplayableStreamEvent[] {
+		const records = this.streamReplayByPane.get(paneId) ?? [];
+		const filtered = records
+			.filter((record) => record.event.seq > sinceSeq)
+			.map((record) => record.event);
+		return filtered.length > limit ? filtered.slice(-limit) : filtered;
 	}
 
 	async createOrAttach(params: CreateSessionParams): Promise<SessionResult> {
@@ -336,6 +466,9 @@ export class DaemonTerminalManager extends EventEmitter {
 						isColdRestore: true,
 						previousCwd: stickyRestore.previousCwd,
 						snapshot: {
+							snapshotVersion: 1,
+							watermarkSeq: this.getCurrentStreamSeq(paneId),
+							partial: false,
 							snapshotAnsi: stickyRestore.scrollback,
 							rehydrateSequences: "",
 							cwd: stickyRestore.previousCwd || null,
@@ -410,6 +543,15 @@ export class DaemonTerminalManager extends EventEmitter {
 			});
 
 			this.daemonAliveSessionIds.add(paneId);
+			if (response.isNew) {
+				this.clearReplayForPane(paneId);
+				this.streamSeqByPane.set(paneId, response.snapshot.watermarkSeq ?? 0);
+			} else if (typeof response.snapshot.watermarkSeq === "number") {
+				this.assignStreamSeq({
+					paneId,
+					incomingSeq: response.snapshot.watermarkSeq,
+				});
+			}
 
 			const sessionCwd = response.snapshot.cwd || cwd || "";
 			const effectiveCols = response.snapshot.cols || cols;
@@ -479,6 +621,9 @@ export class DaemonTerminalManager extends EventEmitter {
 				scrollback: "",
 				wasRecovered: response.wasRecovered,
 				snapshot: {
+					snapshotVersion: response.snapshot.snapshotVersion,
+					watermarkSeq: response.snapshot.watermarkSeq,
+					partial: response.snapshot.partial,
 					snapshotAnsi: response.snapshot.snapshotAnsi,
 					rehydrateSequences: response.snapshot.rehydrateSequences,
 					cwd: response.snapshot.cwd,
@@ -546,6 +691,9 @@ export class DaemonTerminalManager extends EventEmitter {
 			isColdRestore: true,
 			previousCwd: metadata.cwd,
 			snapshot: {
+				snapshotVersion: 1,
+				watermarkSeq: this.getCurrentStreamSeq(paneId),
+				partial: false,
 				snapshotAnsi: scrollback,
 				rehydrateSequences: "",
 				cwd: metadata.cwd,
@@ -663,6 +811,7 @@ export class DaemonTerminalManager extends EventEmitter {
 		}
 
 		await this.client.kill({ sessionId: paneId, deleteHistory });
+		this.clearReplayForPane(paneId);
 	}
 
 	detach(params: { paneId: string }): void {
@@ -858,6 +1007,9 @@ export class DaemonTerminalManager extends EventEmitter {
 		this.daemonSessionIdsHydrated = false;
 		this.coldRestoreInfo.clear();
 		this.killedSessionTombstones.clear();
+		this.streamReplayByPane.clear();
+		this.streamReplayBytesByPane.clear();
+		this.streamSeqByPane.clear();
 		this.removeAllListeners();
 		disposeTerminalHostClient();
 	}
@@ -889,6 +1041,7 @@ export class DaemonTerminalManager extends EventEmitter {
 		await this.client.killAll({});
 		for (const paneId of sessionIds) {
 			portManager.unregisterDaemonSession(paneId);
+			this.clearReplayForPane(paneId);
 		}
 		this.daemonAliveSessionIds.clear();
 		this.daemonSessionIdsHydrated = true;
@@ -911,6 +1064,9 @@ export class DaemonTerminalManager extends EventEmitter {
 		this.daemonSessionIdsHydrated = false;
 		this.coldRestoreInfo.clear();
 		this.killedSessionTombstones.clear();
+		this.streamReplayByPane.clear();
+		this.streamReplayBytesByPane.clear();
+		this.streamSeqByPane.clear();
 
 		this.historyManager.closeAllSync();
 		this.createOrAttachLimiter.reset();
@@ -919,5 +1075,60 @@ export class DaemonTerminalManager extends EventEmitter {
 		this.initializeClient();
 
 		console.log("[DaemonTerminalManager] Reset complete");
+	}
+
+	private appendReplayEvent(paneId: string, event: ReplayableStreamEvent): void {
+		const events = this.streamReplayByPane.get(paneId) ?? [];
+		const eventSerialized = JSON.stringify(event);
+		const sizeBytes = Buffer.byteLength(eventSerialized, "utf8");
+		const record: ReplayEventRecord = { event, sizeBytes };
+
+		events.push(record);
+		let totalBytes = (this.streamReplayBytesByPane.get(paneId) ?? 0) + sizeBytes;
+
+		while (
+			events.length > MAX_STREAM_REPLAY_EVENTS ||
+			totalBytes > MAX_STREAM_REPLAY_BYTES
+		) {
+			const removed = events.shift();
+			if (!removed) break;
+			totalBytes -= removed.sizeBytes;
+		}
+
+		this.streamReplayByPane.set(paneId, events);
+		this.streamReplayBytesByPane.set(paneId, Math.max(0, totalBytes));
+	}
+
+	private getCurrentStreamSeq(paneId: string): number {
+		return this.streamSeqByPane.get(paneId) ?? 0;
+	}
+
+	private nextStreamSeq(paneId: string): number {
+		const next = this.getCurrentStreamSeq(paneId) + 1;
+		this.streamSeqByPane.set(paneId, next);
+		return next;
+	}
+
+	private assignStreamSeq({
+		paneId,
+		incomingSeq,
+	}: {
+		paneId: string;
+		incomingSeq?: number;
+	}): number {
+		if (typeof incomingSeq !== "number" || !Number.isFinite(incomingSeq)) {
+			return this.nextStreamSeq(paneId);
+		}
+
+		const current = this.getCurrentStreamSeq(paneId);
+		const normalized = Math.max(current + 1, Math.floor(incomingSeq));
+		this.streamSeqByPane.set(paneId, normalized);
+		return normalized;
+	}
+
+	private clearReplayForPane(paneId: string): void {
+		this.streamReplayByPane.delete(paneId);
+		this.streamReplayBytesByPane.delete(paneId);
+		this.streamSeqByPane.delete(paneId);
 	}
 }

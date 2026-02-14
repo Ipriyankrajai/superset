@@ -453,18 +453,36 @@ export const createTerminalRouter = () => {
 			}),
 
 		stream: publicProcedure
-			.input(z.string())
-			.subscription(({ input: paneId }) => {
+			.input(
+				z.union([
+					z.string(),
+					z.object({
+						paneId: z.string(),
+						sinceSeq: z.number().int().nonnegative().optional(),
+					}),
+				]),
+			)
+			.subscription(({ input }) => {
+				const paneId = typeof input === "string" ? input : input.paneId;
+				const sinceSeq = typeof input === "string" ? undefined : input.sinceSeq;
 				return observable<
-					| { type: "data"; data: string }
+					| { type: "data"; data: string; seq?: number; emittedAtMs?: number }
 					| {
 							type: "exit";
 							exitCode: number;
 							signal?: number;
 							reason?: "killed" | "exited" | "error";
+							seq?: number;
+							emittedAtMs?: number;
 					  }
-					| { type: "disconnect"; reason: string }
-					| { type: "error"; error: string; code?: string }
+					| { type: "disconnect"; reason: string; seq?: number; emittedAtMs?: number }
+					| {
+							type: "error";
+							error: string;
+							code?: string;
+							seq?: number;
+							emittedAtMs?: number;
+					  }
 				>((emit) => {
 					if (DEBUG_TERMINAL) {
 						console.log(`[Terminal Stream] Subscribe: ${paneId}`);
@@ -472,34 +490,57 @@ export const createTerminalRouter = () => {
 
 					let firstDataReceived = false;
 
-					const onData = (data: string) => {
+					if (typeof sinceSeq === "number" && terminal.getReplayEvents) {
+						const replayEvents = terminal.getReplayEvents({
+							paneId,
+							sinceSeq,
+						});
+						for (const replayEvent of replayEvents) {
+							emit.next(replayEvent);
+						}
+					}
+
+					const onData = (data: string, seq?: number, emittedAtMs?: number) => {
 						if (DEBUG_TERMINAL && !firstDataReceived) {
 							firstDataReceived = true;
 							console.log(
 								`[Terminal Stream] First data for ${paneId}: ${data.length} bytes`,
 							);
 						}
-						emit.next({ type: "data", data });
+						emit.next({ type: "data", data, seq, emittedAtMs });
 					};
 
 					const onExit = (
 						exitCode: number,
 						signal?: number,
 						reason?: "killed" | "exited" | "error",
+						seq?: number,
+						emittedAtMs?: number,
 					) => {
 						// Don't emit.complete() - paneId is reused across restarts, completion would strand listeners
-						emit.next({ type: "exit", exitCode, signal, reason });
+						emit.next({ type: "exit", exitCode, signal, reason, seq, emittedAtMs });
 					};
 
-					const onDisconnect = (reason: string) => {
-						emit.next({ type: "disconnect", reason });
+					const onDisconnect = (
+						reason: string,
+						seq?: number,
+						emittedAtMs?: number,
+					) => {
+						emit.next({ type: "disconnect", reason, seq, emittedAtMs });
 					};
 
-					const onError = (payload: { error: string; code?: string }) => {
+					const onError = (payload: {
+						error: string;
+						code?: string;
+						seq?: number;
+						emittedAtMs?: number;
+					}) => {
 						emit.next({
 							type: "error",
 							error: payload.error,
 							code: payload.code,
+							seq: payload.seq,
+							emittedAtMs: payload.emittedAtMs,
 						});
 					};
 

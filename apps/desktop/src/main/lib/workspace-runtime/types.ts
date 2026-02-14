@@ -102,6 +102,34 @@ export interface TerminalSessionOperations {
 	getSession(
 		paneId: string,
 	): { isAlive: boolean; cwd: string; lastActive: number } | null;
+
+	/**
+	 * Optional bounded replay lookup for stream reconnects.
+	 * Returns events with seq > sinceSeq.
+	 */
+	getReplayEvents?(params: {
+		paneId: string;
+		sinceSeq: number;
+		limit?: number;
+	}): Array<
+		| { type: "data"; data: string; seq: number; emittedAtMs: number }
+		| {
+				type: "exit";
+				exitCode: number;
+				signal?: number;
+				reason?: "killed" | "exited" | "error";
+				seq: number;
+				emittedAtMs: number;
+		  }
+		| { type: "disconnect"; reason: string; seq: number; emittedAtMs: number }
+		| {
+				type: "error";
+				error: string;
+				code?: string;
+				seq: number;
+				emittedAtMs: number;
+		  }
+	>;
 }
 
 // =============================================================================

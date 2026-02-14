@@ -130,6 +130,11 @@ export function useTerminalRestore({
 
 			// Canonical initial content: prefer snapshot (daemon mode) over scrollback
 			const initialAnsi = result.snapshot?.snapshotAnsi ?? result.scrollback;
+			if (result.snapshot?.partial) {
+				console.warn(
+					`[Terminal] Partial snapshot applied for ${paneId}; stream replay will continue from watermark`,
+				);
+			}
 
 			// Track alternate screen mode from snapshot
 			isAlternateScreenRef.current = !!result.snapshot?.modes.alternateScreen;

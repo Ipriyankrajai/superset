@@ -372,6 +372,11 @@ const handlers: Record<string, RequestHandler> = {
 					});
 					return;
 				}
+				const normalizedCode = message.includes("Session not found")
+					? "SESSION_NOT_FOUND"
+					: message.includes("Write queue full")
+						? "WRITE_QUEUE_FULL"
+						: "WRITE_FAILED";
 				const event: IpcEvent = {
 					type: "event",
 					event: "error",
@@ -379,7 +384,8 @@ const handlers: Record<string, RequestHandler> = {
 					payload: {
 						type: "error",
 						error: message,
-						code: "WRITE_FAILED",
+						code: normalizedCode,
+						emittedAtMs: Date.now(),
 					} satisfies TerminalErrorEvent,
 				};
 				streamSocket.write(`${JSON.stringify(event)}\n`);
