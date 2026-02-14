@@ -57,8 +57,8 @@ const INPUT_QUEUE_HARD_LIMIT_BYTES = 64 * 1024 * 1024; // 64MB
 let outputChunks: string[] = [];
 let outputBytesQueued = 0;
 let outputFlushScheduled = false;
-const OUTPUT_FLUSH_INTERVAL_MS = 32; // ~30 fps max
-const MAX_OUTPUT_BATCH_SIZE_BYTES = 128 * 1024; // 128KB max per flush
+const OUTPUT_FLUSH_INTERVAL_MS = 16; // ~60 fps max
+const MAX_OUTPUT_BATCH_SIZE_BYTES = 64 * 1024; // 64KB max per flush
 
 // Backpressure - track if stdout is draining
 let stdoutDraining = true;

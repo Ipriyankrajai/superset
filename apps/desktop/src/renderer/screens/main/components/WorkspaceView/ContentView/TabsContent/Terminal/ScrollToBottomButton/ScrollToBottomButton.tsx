@@ -1,9 +1,11 @@
 import { Tooltip, TooltipContent, TooltipTrigger } from "@superset/ui/tooltip";
 import { cn } from "@superset/ui/utils";
 import type { Terminal } from "ghostty-web";
-import { useCallback, useEffect, useState } from "react";
+import throttle from "lodash/throttle";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { HiArrowDown } from "react-icons/hi2";
 import { useHotkeyText } from "renderer/stores/hotkeys";
+import { SCROLL_CHECK_INTERVAL_MS } from "../config";
 import { scrollToBottom } from "../utils";
 
 interface ScrollToBottomButtonProps {
@@ -12,6 +14,7 @@ interface ScrollToBottomButtonProps {
 
 export function ScrollToBottomButton({ terminal }: ScrollToBottomButtonProps) {
 	const [isVisible, setIsVisible] = useState(false);
+	const lastVisibilityRef = useRef<boolean | null>(null);
 	const shortcutText = useHotkeyText("SCROLL_TO_BOTTOM");
 	const showShortcut = shortcutText !== "Unassigned";
 
@@ -19,23 +22,37 @@ export function ScrollToBottomButton({ terminal }: ScrollToBottomButtonProps) {
 		if (!terminal) return;
 		const buffer = terminal.buffer.active;
 		const isAtBottom = buffer.viewportY >= buffer.baseY;
-		setIsVisible(!isAtBottom);
+		const nextIsVisible = !isAtBottom;
+		if (lastVisibilityRef.current === nextIsVisible) return;
+		lastVisibilityRef.current = nextIsVisible;
+		setIsVisible(nextIsVisible);
 	}, [terminal]);
+
+	const throttledCheckScrollPosition = useMemo(
+		() =>
+			throttle(checkScrollPosition, SCROLL_CHECK_INTERVAL_MS, {
+				leading: true,
+				trailing: true,
+			}),
+		[checkScrollPosition],
+	);
 
 	useEffect(() => {
 		if (!terminal) return;
 
-		checkScrollPosition();
+		lastVisibilityRef.current = null;
+		throttledCheckScrollPosition();
 
 		// Use onRender to detect content changes (replaces onWriteParsed)
-		const renderDisposable = terminal.onRender(checkScrollPosition);
-		const scrollDisposable = terminal.onScroll(checkScrollPosition);
+		const renderDisposable = terminal.onRender(throttledCheckScrollPosition);
+		const scrollDisposable = terminal.onScroll(throttledCheckScrollPosition);
 
 		return () => {
+			throttledCheckScrollPosition.cancel();
 			renderDisposable.dispose();
 			scrollDisposable.dispose();
 		};
-	}, [terminal, checkScrollPosition]);
+	}, [terminal, throttledCheckScrollPosition]);
 
 	const handleClick = () => {
 		if (terminal) {

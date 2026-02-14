@@ -1,8 +1,12 @@
 import { toast } from "@superset/ui/sonner";
 import type { Terminal as XTerm } from "ghostty-web";
-import { useCallback, useEffect, useId } from "react";
+import { useCallback, useEffect, useId, useRef } from "react";
 import { useTabsStore } from "renderer/stores/tabs/store";
-import { DEBUG_TERMINAL } from "../config";
+import {
+	DEBUG_TERMINAL,
+	STREAM_FLUSH_INTERVAL_MS,
+	STREAM_MAX_BATCH_CHARS,
+} from "../config";
 import {
 	isTerminalStreamMountCurrent,
 	registerTerminalStreamMount,
@@ -53,6 +57,11 @@ export function useTerminalStream({
 }: UseTerminalStreamOptions): UseTerminalStreamReturn {
 	const setPaneStatus = useTabsStore((s) => s.setPaneStatus);
 	const streamMountToken = useId();
+	const dataBatchRef = useRef<string[]>([]);
+	const dataBatchCharsRef = useRef(0);
+	const flushTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+	const flushCountRef = useRef(0);
+	const maxBatchCharsRef = useRef(0);
 
 	useEffect(() => {
 		registerTerminalStreamMount({
@@ -72,6 +81,85 @@ export function useTerminalStream({
 			}
 		};
 	}, [paneId, streamMountToken]);
+
+	const flushDataBatch = useCallback(() => {
+		if (flushTimeoutRef.current) {
+			clearTimeout(flushTimeoutRef.current);
+			flushTimeoutRef.current = null;
+		}
+
+		if (dataBatchRef.current.length === 0) return;
+
+		const mergedData = dataBatchRef.current.join("");
+		dataBatchRef.current = [];
+		dataBatchCharsRef.current = 0;
+
+		const xterm = xtermRef.current;
+		if (!xterm || !isStreamReadyRef.current) {
+			// Preserve ordering when readiness flips while we still have buffered data.
+			pendingEventsRef.current.push({ type: "data", data: mergedData });
+			return;
+		}
+
+		maxBatchCharsRef.current = Math.max(
+			maxBatchCharsRef.current,
+			mergedData.length,
+		);
+		flushCountRef.current++;
+
+		updateModesFromData(mergedData);
+		xterm.write(mergedData);
+		updateCwdFromData(mergedData);
+
+		if (
+			DEBUG_TERMINAL &&
+			(flushCountRef.current % 200 === 0 ||
+				mergedData.length >= STREAM_MAX_BATCH_CHARS)
+		) {
+			console.log(
+				`[Terminal] Stream batch stats: pane=${paneId}, flushes=${flushCountRef.current}, maxBatchChars=${maxBatchCharsRef.current}`,
+			);
+		}
+	}, [
+		paneId,
+		xtermRef,
+		isStreamReadyRef,
+		pendingEventsRef,
+		updateModesFromData,
+		updateCwdFromData,
+	]);
+
+	const scheduleDataFlush = useCallback(() => {
+		if (flushTimeoutRef.current) return;
+		flushTimeoutRef.current = setTimeout(() => {
+			flushTimeoutRef.current = null;
+			flushDataBatch();
+		}, STREAM_FLUSH_INTERVAL_MS);
+	}, [flushDataBatch]);
+
+	const enqueueData = useCallback(
+		(data: string) => {
+			dataBatchRef.current.push(data);
+			dataBatchCharsRef.current += data.length;
+			if (dataBatchCharsRef.current >= STREAM_MAX_BATCH_CHARS) {
+				flushDataBatch();
+				return;
+			}
+			scheduleDataFlush();
+		},
+		[flushDataBatch, scheduleDataFlush],
+	);
+
+	useEffect(() => {
+		return () => {
+			if (flushTimeoutRef.current) {
+				clearTimeout(flushTimeoutRef.current);
+				flushTimeoutRef.current = null;
+			}
+			dataBatchRef.current = [];
+			dataBatchCharsRef.current = 0;
+		};
+	}, []);
 
 	const handleTerminalExit = useCallback(
 		(exitCode: number, xterm: XTerm, reason?: TerminalExitReason) => {
@@ -194,6 +282,7 @@ export function useTerminalStream({
 			// Queue ALL events until terminal is ready, preserving order
 			// flushPendingEvents will process them in sequence after restore
 			if (!xterm || !isStreamReadyRef.current) {
+				flushDataBatch();
 				if (DEBUG_TERMINAL && event.type === "data") {
 					console.log(
 						`[Terminal] Queuing event (not ready): ${paneId}, type=${event.type}, bytes=${event.data.length}`,
@@ -205,16 +294,17 @@ export function useTerminalStream({
 
 			// Process events when stream is ready
 			if (event.type === "data") {
-				updateModesFromData(event.data);
-				xterm.write(event.data);
-				updateCwdFromData(event.data);
+				enqueueData(event.data);
 			} else if (event.type === "exit") {
+				flushDataBatch();
 				handleTerminalExit(event.exitCode, xterm, event.reason);
 			} else if (event.type === "disconnect") {
+				flushDataBatch();
 				setConnectionError(
 					event.reason || "Connection to terminal daemon lost",
 				);
 			} else if (event.type === "error") {
+				flushDataBatch();
 				handleStreamError(event, xterm);
 			}
 		},
@@ -227,8 +317,8 @@ export function useTerminalStream({
 			handleTerminalExit,
 			handleStreamError,
 			setConnectionError,
-			updateModesFromData,
-			updateCwdFromData,
+			enqueueData,
+			flushDataBatch,
 		],
 	);
 

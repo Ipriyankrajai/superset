@@ -42,4 +42,11 @@ export const TERMINAL_OPTIONS: ITerminalOptions = {
 	cursorStyle: "block",
 };
 
-export const RESIZE_DEBOUNCE_MS = 150;
+// Coalesce stream frames into renderer writes to reduce main-thread churn.
+export const STREAM_FLUSH_INTERVAL_MS = 8;
+export const STREAM_MAX_BATCH_CHARS = 65_536;
+
+// Avoid running expensive visibility checks on every render callback.
+export const SCROLL_CHECK_INTERVAL_MS = 50;
+
+export const RESIZE_DEBOUNCE_MS = 100;

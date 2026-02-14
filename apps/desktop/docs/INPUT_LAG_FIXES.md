@@ -138,6 +138,30 @@ Wrap frequently re-rendered components with `React.memo`:
 
 This was deferred pending testing of fixes 1-4.
 
+## 2026 Terminal Throughput Tuning
+
+Additional tuning landed for high-output terminal sessions:
+
+1. **Renderer stream batching**
+- File: `src/renderer/screens/main/components/WorkspaceView/ContentView/TabsContent/Terminal/hooks/useTerminalStream.ts`
+- Change: Coalesce data events into a single terminal write every 8ms (or at 64K chars), and flush data before exit/error/disconnect events to preserve ordering.
+- Goal: Reduce per-chunk render pressure and keep typing responsive while logs stream.
+
+2. **Resize hot path guard**
+- File: `src/renderer/screens/main/components/WorkspaceView/ContentView/TabsContent/Terminal/helpers.ts`
+- Change: After `fit()`, send resize IPC only when `cols`/`rows` actually changed.
+- Goal: Avoid unnecessary resize traffic during rapid layout activity.
+
+3. **Scroll-to-bottom check throttling**
+- File: `src/renderer/screens/main/components/WorkspaceView/ContentView/TabsContent/Terminal/ScrollToBottomButton/ScrollToBottomButton.tsx`
+- Change: Throttle visibility checks to 50ms and skip state updates when visibility is unchanged.
+- Goal: Lower React update frequency from terminal render/scroll callbacks.
+
+4. **Daemon output batch latency**
+- File: `src/main/terminal-host/pty-subprocess.ts`
+- Change: Flush output batches every 16ms (was 32ms) and cap batch payload at 64KB (was 128KB).
+- Goal: Deliver output in smaller, more frequent chunks for lower interactive latency.
+
 ## Testing
 
 To verify the fixes work:

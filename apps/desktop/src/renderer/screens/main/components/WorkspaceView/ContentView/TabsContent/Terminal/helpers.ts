@@ -531,9 +531,15 @@ export function setupResizeHandlers(
 	const debouncedHandleResize = debounce(() => {
 		const buffer = xterm.buffer.active;
 		const wasAtBottom = buffer.viewportY >= buffer.baseY;
+		const prevCols = xterm.cols;
+		const prevRows = xterm.rows;
 		fitAddon.fit();
-		onResize(xterm.cols, xterm.rows);
-		if (wasAtBottom) {
+		const hasDimensionChange =
+			xterm.cols !== prevCols || xterm.rows !== prevRows;
+		if (hasDimensionChange) {
+			onResize(xterm.cols, xterm.rows);
+		}
+		if (hasDimensionChange && wasAtBottom) {
 			requestAnimationFrame(() => scrollToBottom(xterm));
 		}
 	}, RESIZE_DEBOUNCE_MS);
