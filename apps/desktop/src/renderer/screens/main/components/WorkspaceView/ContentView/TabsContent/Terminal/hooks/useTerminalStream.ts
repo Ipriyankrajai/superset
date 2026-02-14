@@ -1,8 +1,13 @@
 import { toast } from "@superset/ui/sonner";
 import type { Terminal as XTerm } from "ghostty-web";
-import { useCallback, useRef } from "react";
+import { useCallback, useEffect, useId } from "react";
 import { useTabsStore } from "renderer/stores/tabs/store";
 import { DEBUG_TERMINAL } from "../config";
+import {
+	isTerminalStreamMountCurrent,
+	registerTerminalStreamMount,
+	unregisterTerminalStreamMount,
+} from "../stream-mount-registry";
 import type { TerminalExitReason, TerminalStreamEvent } from "../types";
 
 export interface UseTerminalStreamOptions {
@@ -47,16 +52,43 @@ export function useTerminalStream({
 	updateCwdFromData,
 }: UseTerminalStreamOptions): UseTerminalStreamReturn {
 	const setPaneStatus = useTabsStore((s) => s.setPaneStatus);
-	const firstStreamDataReceivedRef = useRef(false);
+	const streamMountToken = useId();
 
-	// Refs to use latest values in callbacks
-	const updateModesRef = useRef(updateModesFromData);
-	updateModesRef.current = updateModesFromData;
-	const updateCwdRef = useRef(updateCwdFromData);
-	updateCwdRef.current = updateCwdFromData;
+	useEffect(() => {
+		registerTerminalStreamMount({
+			paneId,
+			token: streamMountToken,
+		});
+		if (DEBUG_TERMINAL) {
+			console.log(`[Terminal] Registered stream mount: ${paneId}`);
+		}
+		return () => {
+			unregisterTerminalStreamMount({
+				paneId,
+				token: streamMountToken,
+			});
+			if (DEBUG_TERMINAL) {
+				console.log(`[Terminal] Unregistered stream mount: ${paneId}`);
+			}
+		};
+	}, [paneId, streamMountToken]);
 
 	const handleTerminalExit = useCallback(
 		(exitCode: number, xterm: XTerm, reason?: TerminalExitReason) => {
+			if (
+				!isTerminalStreamMountCurrent({
+					paneId,
+					token: streamMountToken,
+				})
+			) {
+				if (DEBUG_TERMINAL) {
+					console.log(
+						`[Terminal] Dropping stale exit event: ${paneId}, code=${exitCode}, reason=${reason ?? "exited"}`,
+					);
+				}
+				return;
+			}
+
 			isExitedRef.current = true;
 			isStreamReadyRef.current = false;
 
@@ -83,6 +115,7 @@ export function useTerminalStream({
 		},
 		[
 			paneId,
+			streamMountToken,
 			isExitedRef,
 			isStreamReadyRef,
 			wasKilledByUserRef,
@@ -93,6 +126,20 @@ export function useTerminalStream({
 
 	const handleStreamError = useCallback(
 		(event: Extract<TerminalStreamEvent, { type: "error" }>, xterm: XTerm) => {
+			if (
+				!isTerminalStreamMountCurrent({
+					paneId,
+					token: streamMountToken,
+				})
+			) {
+				if (DEBUG_TERMINAL) {
+					console.log(
+						`[Terminal] Dropping stale error event: ${paneId}, code=${event.code ?? "UNKNOWN"}`,
+					);
+				}
+				return;
+			}
+
 			const message = event.code
 				? `${event.code}: ${event.error}`
 				: event.error;
@@ -122,11 +169,26 @@ export function useTerminalStream({
 				setConnectionError(message);
 			}
 		},
-		[setConnectionError],
+		[paneId, streamMountToken, setConnectionError],
 	);
 
 	const handleStreamData = useCallback(
 		(event: TerminalStreamEvent) => {
+			if (
+				!isTerminalStreamMountCurrent({
+					paneId,
+					token: streamMountToken,
+				})
+			) {
+				if (DEBUG_TERMINAL) {
+					const size = event.type === "data" ? event.data.length : 0;
+					console.log(
+						`[Terminal] Dropping stale stream event: ${paneId}, type=${event.type}, bytes=${size}`,
+					);
+				}
+				return;
+			}
+
 			const xterm = xtermRef.current;
 
 			// Queue ALL events until terminal is ready, preserving order
@@ -143,15 +205,9 @@ export function useTerminalStream({
 
 			// Process events when stream is ready
 			if (event.type === "data") {
-				if (DEBUG_TERMINAL && !firstStreamDataReceivedRef.current) {
-					firstStreamDataReceivedRef.current = true;
-					console.log(
-						`[Terminal] First stream data received: ${paneId}, ${event.data.length} bytes`,
-					);
-				}
-				updateModesRef.current(event.data);
+				updateModesFromData(event.data);
 				xterm.write(event.data);
-				updateCwdRef.current(event.data);
+				updateCwdFromData(event.data);
 			} else if (event.type === "exit") {
 				handleTerminalExit(event.exitCode, xterm, event.reason);
 			} else if (event.type === "disconnect") {
@@ -164,12 +220,15 @@ export function useTerminalStream({
 		},
 		[
 			paneId,
+			streamMountToken,
 			xtermRef,
 			isStreamReadyRef,
 			pendingEventsRef,
 			handleTerminalExit,
 			handleStreamError,
 			setConnectionError,
+			updateModesFromData,
+			updateCwdFromData,
 		],
 	);
 

@@ -34,7 +34,11 @@ export function TabsContent() {
 
 	return (
 		<div className="flex-1 min-h-0 flex overflow-hidden">
-			{tabToRender ? <TabView tab={tabToRender} /> : <EmptyTabView />}
+			{tabToRender ? (
+				<TabView key={tabToRender.id} tab={tabToRender} />
+			) : (
+				<EmptyTabView />
+			)}
 		</div>
 	);
 }

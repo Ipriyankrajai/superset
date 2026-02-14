@@ -223,7 +223,7 @@ export function useTerminalLifecycle({
 			if (isUnmounted) {
 				// Unmounted during async init - dispose immediately
 				cleanup();
-				setTimeout(() => xterm.dispose(), 0);
+				xterm.dispose();
 				return;
 			}
 
@@ -599,7 +599,7 @@ export function useTerminalLifecycle({
 				resetModes();
 				renderDisposable?.dispose();
 
-				setTimeout(() => xterm.dispose(), 0);
+				xterm.dispose();
 
 				xtermRef.current = null;
 				searchEngineRef.current = null;
