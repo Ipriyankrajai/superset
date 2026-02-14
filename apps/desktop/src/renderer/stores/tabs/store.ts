@@ -1,6 +1,7 @@
 import type { MosaicNode } from "react-mosaic-component";
 import { updateTree } from "react-mosaic-component";
 import { trpcTabsStorage } from "renderer/lib/trpc-storage";
+import { acknowledgedStatus } from "shared/tabs-types";
 import { create } from "zustand";
 import { devtools, persist } from "zustand/middleware";
 import { movePaneToNewTab, movePaneToTab } from "./actions/move-pane";
@@ -325,17 +326,11 @@ export const useTabsStore = create<TabsStore>()(
 					const newPanes = { ...state.panes };
 					let hasChanges = false;
 					for (const paneId of tabPaneIds) {
-						const currentStatus = newPanes[paneId]?.status;
-						if (currentStatus === "review") {
-							// User acknowledged completion
-							newPanes[paneId] = { ...newPanes[paneId], status: "idle" };
-							hasChanges = true;
-						} else if (currentStatus === "permission") {
-							// Assume permission granted, agent is now working
-							newPanes[paneId] = { ...newPanes[paneId], status: "working" };
+						const resolved = acknowledgedStatus(newPanes[paneId]?.status);
+						if (resolved !== (newPanes[paneId]?.status ?? "idle")) {
+							newPanes[paneId] = { ...newPanes[paneId], status: resolved };
 							hasChanges = true;
 						}
-						// "working" status is NOT cleared by click - persists until Stop
 					}
 
 					set({
@@ -682,6 +677,48 @@ export const useTabsStore = create<TabsStore>()(
 					}
 
 					// No reusable pane found, create a new one
+					if (options.openInNewTab) {
+						const workspaceId = activeTab.workspaceId;
+						const newTabId = generateId("tab");
+						const newPane = createFileViewerPane(newTabId, options);
+
+						const newTab = {
+							id: newTabId,
+							workspaceId,
+							name: newPane.name,
+							layout: newPane.id as MosaicNode<string>,
+							createdAt: Date.now(),
+						};
+
+						const currentActiveId = state.activeTabIds[workspaceId];
+						const historyStack = state.tabHistoryStacks[workspaceId] || [];
+						const newHistoryStack = currentActiveId
+							? [
+									currentActiveId,
+									...historyStack.filter((id) => id !== currentActiveId),
+								]
+							: historyStack;
+
+						set({
+							tabs: [...state.tabs, newTab],
+							panes: { ...state.panes, [newPane.id]: newPane },
+							activeTabIds: {
+								...state.activeTabIds,
+								[workspaceId]: newTab.id,
+							},
+							focusedPaneIds: {
+								...state.focusedPaneIds,
+								[newTab.id]: newPane.id,
+							},
+							tabHistoryStacks: {
+								...state.tabHistoryStacks,
+								[workspaceId]: newHistoryStack,
+							},
+						});
+
+						return newPane.id;
+					}
+
 					const newPane = createFileViewerPane(activeTab.id, options);
 
 					const newLayout: MosaicNode<string> = {
@@ -769,7 +806,7 @@ export const useTabsStore = create<TabsStore>()(
 					set({
 						panes: {
 							...state.panes,
-							[paneId]: { ...pane, status: "idle" },
+							[paneId]: { ...pane, status: acknowledgedStatus(pane.status) },
 						},
 						focusedPaneIds: {
 							...state.focusedPaneIds,
@@ -839,17 +876,11 @@ export const useTabsStore = create<TabsStore>()(
 					const newPanes = { ...state.panes };
 					let hasChanges = false;
 					for (const paneId of workspacePaneIds) {
-						const currentStatus = newPanes[paneId]?.status;
-						if (currentStatus === "review") {
-							// User acknowledged completion
-							newPanes[paneId] = { ...newPanes[paneId], status: "idle" };
-							hasChanges = true;
-						} else if (currentStatus === "permission") {
-							// Assume permission granted, Claude is now working
-							newPanes[paneId] = { ...newPanes[paneId], status: "working" };
+						const resolved = acknowledgedStatus(newPanes[paneId]?.status);
+						if (resolved !== (newPanes[paneId]?.status ?? "idle")) {
+							newPanes[paneId] = { ...newPanes[paneId], status: resolved };
 							hasChanges = true;
 						}
-						// "working" status is NOT cleared by click - persists until Stop
 					}
 
 					if (hasChanges) {

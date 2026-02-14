@@ -49,7 +49,7 @@ const NOTIFY_SLACK_URL = `${env.NEXT_PUBLIC_API_URL}/api/integrations/stripe/job
 export const auth = betterAuth({
 	baseURL: env.NEXT_PUBLIC_API_URL,
 	secret: env.BETTER_AUTH_SECRET,
-	disabledPaths: ["/token"],
+	disabledPaths: [],
 	database: drizzleAdapter(db, {
 		provider: "pg",
 		usePlural: true,
@@ -131,6 +131,21 @@ export const auth = betterAuth({
 				issuer: env.NEXT_PUBLIC_API_URL,
 				audience: env.NEXT_PUBLIC_API_URL,
 				expirationTime: "1h",
+				definePayload: async ({
+					user,
+				}: {
+					user: { id: string; email: string };
+					session: Record<string, unknown>;
+				}) => {
+					const userMemberships = await db.query.members.findMany({
+						where: eq(members.userId, user.id),
+						columns: { organizationId: true },
+					});
+					const organizationIds = [
+						...new Set(userMemberships.map((m) => m.organizationId)),
+					];
+					return { sub: user.id, email: user.email, organizationIds };
+				},
 			},
 		}),
 		oauthProvider({
@@ -430,15 +445,19 @@ export const auth = betterAuth({
 
 			let activeOrganizationId = session.activeOrganizationId;
 
-			const membership = await db.query.members.findFirst({
-				where: activeOrganizationId
-					? and(
-							eq(members.userId, session.userId ?? user.id),
-							eq(members.organizationId, activeOrganizationId),
-						)
-					: eq(members.userId, session.userId ?? user.id),
+			const allMemberships = await db.query.members.findMany({
+				where: eq(members.userId, session.userId ?? user.id),
 				orderBy: desc(members.createdAt),
 			});
+
+			const organizationIds = [
+				...new Set(allMemberships.map((m) => m.organizationId)),
+			];
+
+			// Find membership for active org, or fall back to most recent
+			const membership = activeOrganizationId
+				? allMemberships.find((m) => m.organizationId === activeOrganizationId)
+				: allMemberships[0];
 
 			if (!activeOrganizationId && membership?.organizationId) {
 				activeOrganizationId = membership.organizationId;
@@ -464,6 +483,7 @@ export const auth = betterAuth({
 				session: {
 					...session,
 					activeOrganizationId,
+					organizationIds,
 					role: membership?.role,
 					plan,
 				},

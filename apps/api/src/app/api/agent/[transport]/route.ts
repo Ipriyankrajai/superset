@@ -29,7 +29,47 @@ async function verifyToken(req: Request, bearerToken?: string) {
 		};
 	}
 
-	// 2. Try OAuth access token verification via JWKS
+	// 2. Try API key verification (for sk_live_ tokens)
+	if (bearerToken) {
+		try {
+			const result = await auth.api.verifyApiKey({
+				body: { key: bearerToken },
+			});
+			if (result.valid && result.key) {
+				const userId = result.key.userId;
+				if (!userId) {
+					console.error("[mcp/auth] API key missing userId");
+					return undefined;
+				}
+				const metadata =
+					typeof result.key.metadata === "string"
+						? JSON.parse(result.key.metadata)
+						: result.key.metadata;
+				const organizationId = metadata?.organizationId as string | undefined;
+				if (!organizationId) {
+					console.error(
+						"[mcp/auth] API key missing organizationId in metadata",
+					);
+					return undefined;
+				}
+				return {
+					token: "api-key",
+					clientId: "api-key",
+					scopes: ["mcp:full"],
+					extra: {
+						mcpContext: {
+							userId,
+							organizationId,
+						} satisfies McpContext,
+					},
+				};
+			}
+		} catch (error) {
+			console.error("[mcp/auth] API key verification failed:", error);
+		}
+	}
+
+	// 3. Try OAuth access token verification via JWKS
 	if (bearerToken) {
 		try {
 			const payload = await verifyAccessToken(bearerToken, {
