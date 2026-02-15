@@ -64,12 +64,14 @@ export function useTerminalStream({
 	const flushTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const flushCountRef = useRef(0);
 	const maxBatchCharsRef = useRef(0);
+	const lastHandledSeqRef = useRef(0);
 
 	useEffect(() => {
 		registerTerminalStreamMount({
 			paneId,
 			token: streamMountToken,
 		});
+		lastHandledSeqRef.current = 0;
 		if (DEBUG_TERMINAL) {
 			console.log(`[Terminal] Registered stream mount: ${paneId}`);
 		}
@@ -141,6 +143,20 @@ export function useTerminalStream({
 
 	const enqueueData = useCallback(
 		(data: string) => {
+			if (
+				dataBatchRef.current.length === 0 &&
+				flushTimeoutRef.current === null &&
+				data.length <= 16
+			) {
+				const xterm = xtermRef.current;
+				if (xterm && isStreamReadyRef.current) {
+					updateModesFromData(data);
+					xterm.write(data);
+					updateCwdFromData(data);
+					return;
+				}
+			}
+
 			dataBatchRef.current.push(data);
 			dataBatchCharsRef.current += data.length;
 			if (dataBatchCharsRef.current >= STREAM_MAX_BATCH_CHARS) {
@@ -149,7 +165,14 @@ export function useTerminalStream({
 			}
 			scheduleDataFlush();
 		},
-		[flushDataBatch, scheduleDataFlush],
+		[
+			xtermRef,
+			isStreamReadyRef,
+			updateModesFromData,
+			updateCwdFromData,
+			flushDataBatch,
+			scheduleDataFlush,
+		],
 	);
 
 	useEffect(() => {
@@ -284,6 +307,19 @@ export function useTerminalStream({
 				return;
 			}
 
+			if (typeof event.seq === "number") {
+				if (event.seq <= lastHandledSeqRef.current) {
+					if (DEBUG_TERMINAL) {
+						console.log(
+							`[Terminal] Dropping duplicate/replayed event: ${paneId}, type=${event.type}, seq=${event.seq}, last=${lastHandledSeqRef.current}`,
+						);
+					}
+					return;
+				}
+				lastHandledSeqRef.current = event.seq;
+				onStreamSeq?.(event.seq);
+			}
+
 			const xterm = xtermRef.current;
 
 			// Queue ALL events until terminal is ready, preserving order
@@ -300,9 +336,6 @@ export function useTerminalStream({
 			}
 
 			// Process events when stream is ready
-			if (typeof event.seq === "number") {
-				onStreamSeq?.(event.seq);
-			}
 			if (event.type === "data") {
 				enqueueData(event.data);
 			} else if (event.type === "exit") {

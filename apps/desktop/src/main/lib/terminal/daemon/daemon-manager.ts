@@ -198,36 +198,36 @@ export class DaemonTerminalManager extends EventEmitter {
 				incomingSeq?: number,
 				emittedAtMs?: number,
 			) => {
-			const paneId = sessionId;
-			const seq = this.assignStreamSeq({
-				paneId,
-				incomingSeq,
-			});
-			const timestamp = emittedAtMs ?? Date.now();
-			if (DEBUG_TERMINAL) {
-				const listenerCount = this.listenerCount(`data:${paneId}`);
-				console.log(
-					`[DaemonTerminalManager] Received data from daemon: paneId=${paneId}, bytes=${data.length}, listeners=${listenerCount}`,
+				const paneId = sessionId;
+				const seq = this.assignStreamSeq({
+					paneId,
+					incomingSeq,
+				});
+				const timestamp = emittedAtMs ?? Date.now();
+				if (DEBUG_TERMINAL) {
+					const listenerCount = this.listenerCount(`data:${paneId}`);
+					console.log(
+						`[DaemonTerminalManager] Received data from daemon: paneId=${paneId}, bytes=${data.length}, listeners=${listenerCount}`,
+					);
+				}
+
+				const session = this.sessions.get(paneId);
+				if (session) {
+					session.lastActive = Date.now();
+				}
+
+				portManager.checkOutputForHint(data, paneId);
+				this.historyManager.writeToHistory(paneId, data, () =>
+					this.sessions.get(paneId),
 				);
-			}
-
-			const session = this.sessions.get(paneId);
-			if (session) {
-				session.lastActive = Date.now();
-			}
-
-			portManager.checkOutputForHint(data, paneId);
-			this.historyManager.writeToHistory(paneId, data, () =>
-				this.sessions.get(paneId),
-			);
-			const event: ReplayableStreamEvent = {
-				type: "data",
-				data,
-				seq,
-				emittedAtMs: timestamp,
-			};
-			this.appendReplayEvent(paneId, event);
-			this.emit(`data:${paneId}`, data, seq, timestamp);
+				const event: ReplayableStreamEvent = {
+					type: "data",
+					data,
+					seq,
+					emittedAtMs: timestamp,
+				};
+				this.appendReplayEvent(paneId, event);
+				this.emit(`data:${paneId}`, data, seq, timestamp);
 			},
 		);
 
@@ -1077,14 +1077,18 @@ export class DaemonTerminalManager extends EventEmitter {
 		console.log("[DaemonTerminalManager] Reset complete");
 	}
 
-	private appendReplayEvent(paneId: string, event: ReplayableStreamEvent): void {
+	private appendReplayEvent(
+		paneId: string,
+		event: ReplayableStreamEvent,
+	): void {
 		const events = this.streamReplayByPane.get(paneId) ?? [];
 		const eventSerialized = JSON.stringify(event);
 		const sizeBytes = Buffer.byteLength(eventSerialized, "utf8");
 		const record: ReplayEventRecord = { event, sizeBytes };
 
 		events.push(record);
-		let totalBytes = (this.streamReplayBytesByPane.get(paneId) ?? 0) + sizeBytes;
+		let totalBytes =
+			(this.streamReplayBytesByPane.get(paneId) ?? 0) + sizeBytes;
 
 		while (
 			events.length > MAX_STREAM_REPLAY_EVENTS ||

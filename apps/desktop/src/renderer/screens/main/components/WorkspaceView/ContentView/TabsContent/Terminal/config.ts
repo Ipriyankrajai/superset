@@ -43,7 +43,7 @@ export const TERMINAL_OPTIONS: ITerminalOptions = {
 };
 
 // Coalesce stream frames into renderer writes to reduce main-thread churn.
-export const STREAM_FLUSH_INTERVAL_MS = 8;
+export const STREAM_FLUSH_INTERVAL_MS = 4;
 export const STREAM_MAX_BATCH_CHARS = 65_536;
 
 // Avoid running expensive visibility checks on every render callback.

@@ -128,9 +128,15 @@ export function useTerminalColdRestore({
 					pendingInitialStateRef.current = result;
 					maybeApplyInitialState();
 
-					if (isFocusedRef.current) {
-						currentXterm.focus();
-					}
+					// Ensure cursor is visible after reconnect and re-focus when appropriate.
+					requestAnimationFrame(() => {
+						const activeXterm = xtermRef.current;
+						if (!activeXterm) return;
+						activeXterm.write("\x1b[?25h");
+						if (isFocusedRef.current) {
+							activeXterm.focus();
+						}
+					});
 				},
 				onError: (error: { message?: string }) => {
 					if (error.message?.includes("TERMINAL_SESSION_KILLED")) {
@@ -212,12 +218,15 @@ export function useTerminalColdRestore({
 					setIsRestoredMode(false);
 					coldRestoreState.delete(paneId);
 
-					setTimeout(() => {
+					// Run after restore scheduling so the prompt cursor is visible.
+					requestAnimationFrame(() => {
 						const currentXterm = xtermRef.current;
-						if (currentXterm) {
+						if (!currentXterm) return;
+						currentXterm.write("\x1b[?25h");
+						if (isFocusedRef.current) {
 							currentXterm.focus();
 						}
-					}, 0);
+					});
 				},
 				onError: (error: { message?: string }) => {
 					console.error("[Terminal] Failed to start shell:", error);
@@ -246,6 +255,7 @@ export function useTerminalColdRestore({
 		maybeApplyInitialState,
 		flushPendingEvents,
 		resetModes,
+		isFocusedRef,
 	]);
 
 	return {

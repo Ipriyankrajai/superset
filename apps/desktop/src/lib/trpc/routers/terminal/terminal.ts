@@ -475,7 +475,12 @@ export const createTerminalRouter = () => {
 							seq?: number;
 							emittedAtMs?: number;
 					  }
-					| { type: "disconnect"; reason: string; seq?: number; emittedAtMs?: number }
+					| {
+							type: "disconnect";
+							reason: string;
+							seq?: number;
+							emittedAtMs?: number;
+					  }
 					| {
 							type: "error";
 							error: string;
@@ -518,7 +523,14 @@ export const createTerminalRouter = () => {
 						emittedAtMs?: number,
 					) => {
 						// Don't emit.complete() - paneId is reused across restarts, completion would strand listeners
-						emit.next({ type: "exit", exitCode, signal, reason, seq, emittedAtMs });
+						emit.next({
+							type: "exit",
+							exitCode,
+							signal,
+							reason,
+							seq,
+							emittedAtMs,
+						});
 					};
 
 					const onDisconnect = (

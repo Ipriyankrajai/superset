@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { electronTrpc } from "renderer/lib/electron-trpc";
+import { electronTrpcClient } from "renderer/lib/trpc-client";
 
 export interface UseTerminalConnectionOptions {
 	workspaceId: string;
@@ -25,7 +26,6 @@ export function useTerminalConnection({
 	// tRPC mutations
 	const createOrAttachMutation =
 		electronTrpc.terminal.createOrAttach.useMutation();
-	const writeMutation = electronTrpc.terminal.write.useMutation();
 	const resizeMutation = electronTrpc.terminal.resize.useMutation();
 	const detachMutation = electronTrpc.terminal.detach.useMutation();
 	const clearScrollbackMutation =
@@ -37,14 +37,24 @@ export function useTerminalConnection({
 
 	// Stable refs to mutation functions - these don't change identity on re-render
 	const createOrAttachRef = useRef(createOrAttachMutation.mutate);
-	const writeRef = useRef(writeMutation.mutate);
+	const writeRef = useRef(
+		({ paneId, data }: { paneId: string; data: string }) => {
+			void electronTrpcClient.terminal.write
+				.mutate({ paneId, data })
+				.catch(() => {});
+		},
+	);
 	const resizeRef = useRef(resizeMutation.mutate);
 	const detachRef = useRef(detachMutation.mutate);
 	const clearScrollbackRef = useRef(clearScrollbackMutation.mutate);
 
 	// Keep refs up to date
 	createOrAttachRef.current = createOrAttachMutation.mutate;
-	writeRef.current = writeMutation.mutate;
+	writeRef.current = ({ paneId, data }: { paneId: string; data: string }) => {
+		void electronTrpcClient.terminal.write
+			.mutate({ paneId, data })
+			.catch(() => {});
+	};
 	resizeRef.current = resizeMutation.mutate;
 	detachRef.current = detachMutation.mutate;
 	clearScrollbackRef.current = clearScrollbackMutation.mutate;
