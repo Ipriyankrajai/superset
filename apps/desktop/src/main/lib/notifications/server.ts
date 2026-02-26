@@ -132,6 +132,12 @@ app.get("/hook/complete", (req, res) => {
 		workspaceId as string | undefined,
 	);
 
+	if (!resolvedPaneId) {
+		console.warn(
+			`[notifications] Could not resolve paneId for ${mappedEventType} event (paneId=${paneId}, tabId=${tabId}, workspaceId=${workspaceId})`,
+		);
+	}
+
 	const event: AgentLifecycleEvent = {
 		paneId: resolvedPaneId,
 		tabId: tabId as string | undefined,

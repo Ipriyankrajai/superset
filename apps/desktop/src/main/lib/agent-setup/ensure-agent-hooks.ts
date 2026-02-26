@@ -77,10 +77,10 @@ async function ensureScriptFile(params: {
 async function ensureClaudeSettings(): Promise<void> {
 	const settingsPath = getClaudeSettingsPath();
 	const notifyPath = getNotifyScriptPath();
+	const content = getClaudeSettingsContent(notifyPath);
 	const existing = await readFileIfExists(settingsPath);
 
-	if (!existing || !existing.includes('"hooks"')) {
-		const content = getClaudeSettingsContent(notifyPath);
+	if (existing !== content) {
 		await fs.writeFile(settingsPath, content, { mode: 0o644 });
 		console.log("[agent-setup] Rewrote Claude settings");
 	}

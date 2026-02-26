@@ -75,13 +75,13 @@ export function getOpenCodeGlobalPluginPath(): string {
 }
 
 export function getClaudeSettingsContent(notifyPath: string): string {
+	const hook = { type: "command", command: notifyPath, async: true };
 	const settings = {
 		hooks: {
-			UserPromptSubmit: [{ hooks: [{ type: "command", command: notifyPath }] }],
-			Stop: [{ hooks: [{ type: "command", command: notifyPath }] }],
-			PermissionRequest: [
-				{ matcher: "*", hooks: [{ type: "command", command: notifyPath }] },
-			],
+			UserPromptSubmit: [{ hooks: [hook] }],
+			Stop: [{ hooks: [hook] }],
+			PermissionRequest: [{ matcher: "*", hooks: [hook] }],
+			Notification: [{ matcher: "permission_prompt", hooks: [hook] }],
 		},
 	};
 

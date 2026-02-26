@@ -30,6 +30,15 @@ fi
 # Map UserPromptSubmit to Start for simpler handling
 [ "$EVENT_TYPE" = "UserPromptSubmit" ] && EVENT_TYPE="Start"
 
+# Map Notification events to lifecycle events based on notification_type
+if [ "$EVENT_TYPE" = "Notification" ]; then
+  NOTIF_TYPE=$(echo "$INPUT" | grep -oE '"notification_type"[[:space:]]*:[[:space:]]*"[^"]*"' | grep -oE '"[^"]*"$' | tr -d '"')
+  case "$NOTIF_TYPE" in
+    permission_prompt) EVENT_TYPE="PermissionRequest" ;;
+    *) exit 0 ;; # Ignore other notification types
+  esac
+fi
+
 # If no event type was found, skip the notification
 # This prevents parse failures from causing false completion notifications
 [ -z "$EVENT_TYPE" ] && exit 0
