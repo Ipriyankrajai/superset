@@ -140,7 +140,10 @@ async function handleRequest(req: Request): Promise<Response> {
 	const authInfo = await verifyToken(req);
 	if (!authInfo) return unauthorizedResponse(req);
 
-	const transport = new WebStandardStreamableHTTPServerTransport();
+	const transport = new WebStandardStreamableHTTPServerTransport({
+		sessionIdGenerator: undefined,
+		enableJsonResponse: true,
+	});
 	const server = createMcpServer();
 	await server.connect(transport);
 
