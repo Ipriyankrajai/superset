@@ -39,12 +39,16 @@ export const TERMINAL_OPTIONS: ITerminalOptions = {
 	fontFamily: DEFAULT_TERMINAL_FONT_FAMILY,
 	theme: TERMINAL_THEME,
 	allowProposedApi: true,
-	scrollback: 10000,
+	scrollback: 5000,
 	// Allow Option+key to type special characters on international keyboards (e.g., Option+2 = @)
 	macOptionIsMeta: false,
 	cursorStyle: "block",
 	cursorInactiveStyle: "outline",
 	screenReaderMode: false,
+	fastScrollModifier: "alt",
+	fastScrollSensitivity: 5,
+	smoothScrollDuration: 0,
+	rescaleOverlappingGlyphs: true,
 };
 
-export const RESIZE_DEBOUNCE_MS = 150;
+export const RESIZE_DEBOUNCE_MS = 30;

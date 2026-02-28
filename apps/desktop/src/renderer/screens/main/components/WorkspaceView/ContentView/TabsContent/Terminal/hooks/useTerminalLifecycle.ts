@@ -527,6 +527,7 @@ export function useTerminalLifecycle({
 			xterm,
 			fitAddon,
 			(cols, rows) => resizeRef.current({ paneId, cols, rows }),
+			renderer,
 		);
 		const cleanupPaste = setupPasteHandler(xterm, {
 			onPaste: (text) => {
@@ -546,6 +547,7 @@ export function useTerminalLifecycle({
 			fitAddon.fit();
 			if (xterm.cols !== prevCols || xterm.rows !== prevRows) {
 				resizeRef.current({ paneId, cols: xterm.cols, rows: xterm.rows });
+				renderer.current.clearTextureAtlas?.();
 			}
 			if (wasAtBottom) {
 				requestAnimationFrame(() => {

@@ -2,12 +2,11 @@ import { toast } from "@superset/ui/sonner";
 import { ClipboardAddon } from "@xterm/addon-clipboard";
 import { FitAddon } from "@xterm/addon-fit";
 import { ImageAddon } from "@xterm/addon-image";
-import { LigaturesAddon } from "@xterm/addon-ligatures";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { WebglAddon } from "@xterm/addon-webgl";
 import type { ITheme } from "@xterm/xterm";
 import { Terminal as XTerm } from "@xterm/xterm";
-import { debounce } from "lodash";
+import debounce from "lodash/debounce";
 import { electronTrpcClient as trpcClient } from "renderer/lib/trpc-client";
 import { getHotkeyKeys, isAppHotkeyEvent } from "renderer/stores/hotkeys";
 import { toXtermTheme } from "renderer/stores/theme/utils";
@@ -226,14 +225,6 @@ export function createTerminalInstance(
 		if (isDisposed) return;
 		rendererRef.current = loadRenderer(xterm);
 	});
-
-	try {
-		if (!isDisposed) {
-			xterm.loadAddon(new LigaturesAddon());
-		}
-	} catch {
-		// Ligatures not supported by current font
-	}
 
 	const cleanupQuerySuppression = suppressQueryResponses(xterm);
 
@@ -673,15 +664,37 @@ export function setupResizeHandlers(
 	xterm: XTerm,
 	fitAddon: FitAddon,
 	onResize: (cols: number, rows: number) => void,
+	rendererRef?: TerminalRendererRef,
 ): () => void {
+	let resizeRafId: number | null = null;
+
 	const debouncedHandleResize = debounce(() => {
-		const buffer = xterm.buffer.active;
-		const wasAtBottom = buffer.viewportY >= buffer.baseY;
-		fitAddon.fit();
-		onResize(xterm.cols, xterm.rows);
-		if (wasAtBottom) {
-			requestAnimationFrame(() => scrollToBottom(xterm));
+		// Cancel any pending rAF to avoid stacking
+		if (resizeRafId !== null) {
+			cancelAnimationFrame(resizeRafId);
 		}
+
+		resizeRafId = requestAnimationFrame(() => {
+			resizeRafId = null;
+			const buffer = xterm.buffer.active;
+			const wasAtBottom = buffer.viewportY >= buffer.baseY;
+			const prevCols = xterm.cols;
+			const prevRows = xterm.rows;
+
+			fitAddon.fit();
+
+			// Only notify if dimensions actually changed
+			if (xterm.cols !== prevCols || xterm.rows !== prevRows) {
+				onResize(xterm.cols, xterm.rows);
+			}
+
+			// Clear WebGL texture atlas after resize to prevent character glitches
+			rendererRef?.current.clearTextureAtlas?.();
+
+			if (wasAtBottom) {
+				scrollToBottom(xterm);
+			}
+		});
 	}, RESIZE_DEBOUNCE_MS);
 
 	const resizeObserver = new ResizeObserver(debouncedHandleResize);
@@ -692,6 +705,9 @@ export function setupResizeHandlers(
 		window.removeEventListener("resize", debouncedHandleResize);
 		resizeObserver.disconnect();
 		debouncedHandleResize.cancel();
+		if (resizeRafId !== null) {
+			cancelAnimationFrame(resizeRafId);
+		}
 	};
 }
 

@@ -19,6 +19,11 @@ const OSC7_PATTERN = new RegExp(
  * Returns the last (most recent) directory found, or null if none.
  */
 export function parseCwd(data: string): string | null {
+	// Fast path: OSC 7 sequences always start with ESC]7; - skip regex if not present
+	if (data.indexOf("\x1b]7;") === -1) {
+		return null;
+	}
+
 	let lastMatch: string | null = null;
 
 	for (const match of data.matchAll(OSC7_PATTERN)) {

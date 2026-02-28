@@ -37,6 +37,12 @@ export function useTerminalModes(): UseTerminalModesReturn {
 	const modeScanBufferRef = useRef("");
 
 	const updateModesFromData = useCallback((data: string) => {
+		// Fast path: skip scanning if data contains no ESC character and no carry buffer
+		const hasEsc = data.indexOf("\x1b") !== -1;
+		if (!hasEsc && modeScanBufferRef.current.length === 0) {
+			return;
+		}
+
 		// Escape sequences can be split across streamed frames, so scan using a small carry buffer.
 		const combined = modeScanBufferRef.current + data;
 
