@@ -31,6 +31,7 @@ import {
 	setLastActiveWorkspace,
 	touchWorkspace,
 } from "../workspaces/utils/db-helpers";
+import { getProcessEnvWithShellPath } from "../workspaces/utils/shell-env";
 import {
 	getCurrentBranch,
 	getDefaultBranch,
@@ -337,6 +338,7 @@ export const createProjectsRouter = (getWindow: () => BrowserWindow | null) => {
 					}
 
 					const git = simpleGit(project.mainRepoPath);
+					git.env(await getProcessEnvWithShellPath());
 
 					let hasOrigin = false;
 					try {
@@ -344,7 +346,21 @@ export const createProjectsRouter = (getWindow: () => BrowserWindow | null) => {
 						hasOrigin = remotes.some((r) => r.name === "origin");
 					} catch {}
 
-					const branchSummary = await git.branch(["-a"]);
+					let branchSummary: Awaited<ReturnType<typeof git.branch>>;
+					try {
+						branchSummary = await git.branch(["-a"]);
+					} catch (error) {
+						console.warn(
+							`[projects/getBranches] Failed to list branches for ${project.mainRepoPath}:`,
+							error instanceof Error ? error.message : String(error),
+						);
+						branchSummary = {
+							branches: {},
+							all: [],
+							current: "",
+							detached: false,
+						} as Awaited<ReturnType<typeof git.branch>>;
+					}
 
 					const localBranchSet = new Set<string>();
 					const remoteBranchSet = new Set<string>();
@@ -461,9 +477,17 @@ export const createProjectsRouter = (getWindow: () => BrowserWindow | null) => {
 					);
 
 					// Sync with remote in case the default branch changed (e.g. master -> main)
-					const remoteDefaultBranch = await refreshDefaultBranch(
-						project.mainRepoPath,
-					);
+					let remoteDefaultBranch: string | null = null;
+					try {
+						remoteDefaultBranch = await refreshDefaultBranch(
+							project.mainRepoPath,
+						);
+					} catch (error) {
+						console.warn(
+							"[projects/getBranches] Failed to refresh default branch:",
+							error instanceof Error ? error.message : String(error),
+						);
+					}
 
 					const defaultBranch =
 						remoteDefaultBranch ||

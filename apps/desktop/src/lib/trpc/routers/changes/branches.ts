@@ -10,6 +10,7 @@ import {
 	unsetBranchBaseConfig,
 } from "../workspaces/utils/base-branch-config";
 import { getCurrentBranch } from "../workspaces/utils/git";
+import { getProcessEnvWithShellPath } from "../workspaces/utils/shell-env";
 import {
 	assertRegisteredWorktree,
 	getRegisteredWorktree,
@@ -33,8 +34,23 @@ export const createBranchesRouter = () => {
 					assertRegisteredWorktree(input.worktreePath);
 
 					const git = simpleGit(input.worktreePath);
+					git.env(await getProcessEnvWithShellPath());
 
-					const branchSummary = await git.branch(["-a"]);
+					let branchSummary: Awaited<ReturnType<typeof git.branch>>;
+					try {
+						branchSummary = await git.branch(["-a"]);
+					} catch (error) {
+						console.warn(
+							`[changes/getBranches] Failed to list branches for ${input.worktreePath}:`,
+							error instanceof Error ? error.message : String(error),
+						);
+						branchSummary = {
+							branches: {},
+							all: [],
+							current: "",
+							detached: false,
+						} as Awaited<ReturnType<typeof git.branch>>;
+					}
 					const currentBranch = await getCurrentBranch(input.worktreePath);
 					const { baseBranch: configuredBaseBranch } = currentBranch
 						? await getBranchBaseConfig({
