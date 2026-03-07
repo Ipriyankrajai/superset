@@ -123,6 +123,51 @@ export function getCredentialsFromKeychain(): ClaudeCredentials | null {
 		// Not found in keychain
 	}
 
+	try {
+		const result = execSync(
+			'security find-generic-password -s "Claude Code-credentials" -w 2>/dev/null',
+			{ encoding: "utf-8" },
+		).trim();
+
+		if (result) {
+			const config: ClaudeConfigFile = JSON.parse(result);
+
+			if (config.claudeAiOauth?.accessToken) {
+				console.log(
+					"[claude/auth] Found OAuth credentials in macOS Keychain (Claude Code-credentials)",
+				);
+				return {
+					apiKey: config.claudeAiOauth.accessToken,
+					source: "keychain",
+					kind: "oauth",
+				};
+			}
+
+			const apiKey = config.apiKey || config.api_key;
+			if (apiKey) {
+				console.log(
+					"[claude/auth] Found API key in macOS Keychain (Claude Code-credentials)",
+				);
+				return { apiKey, source: "keychain", kind: "apiKey" };
+			}
+
+			const oauthAccessToken =
+				config.oauthAccessToken || config.oauth_access_token;
+			if (oauthAccessToken) {
+				console.log(
+					"[claude/auth] Found OAuth credentials in macOS Keychain (Claude Code-credentials)",
+				);
+				return {
+					apiKey: oauthAccessToken,
+					source: "keychain",
+					kind: "oauth",
+				};
+			}
+		}
+	} catch {
+		// Not found in keychain or failed to parse
+	}
+
 	return null;
 }
 
