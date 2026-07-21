@@ -15,7 +15,10 @@ import {
 } from "../../../../../components/TasksView/components/shared/StatusIcon";
 import { StatusMenuItems } from "../../../../../components/TasksView/components/shared/StatusMenuItems";
 import type { TaskWithStatus } from "../../../../../components/TasksView/hooks/useTasksTable";
-import { compareStatusesForDropdown } from "../../../../../components/TasksView/utils/sorting";
+import {
+	dedupeStatusesByName,
+	isSameStatusName,
+} from "../../../../../components/TasksView/utils/sorting";
 
 interface StatusPropertyProps {
 	task: TaskWithStatus;
@@ -34,12 +37,13 @@ export function StatusProperty({ task }: StatusPropertyProps) {
 	const statuses = useMemo(() => allStatuses || [], [allStatuses]);
 	const currentStatus = task.status;
 
-	const sortedStatuses = useMemo(() => {
-		return statuses.sort(compareStatusesForDropdown);
-	}, [statuses]);
+	const sortedStatuses = useMemo(
+		() => dedupeStatusesByName(statuses),
+		[statuses],
+	);
 
 	const handleSelectStatus = (newStatus: SelectTaskStatus) => {
-		if (newStatus.id === currentStatus.id) {
+		if (isSameStatusName(newStatus.name, currentStatus.name)) {
 			setOpen(false);
 			return;
 		}
@@ -69,7 +73,7 @@ export function StatusProperty({ task }: StatusPropertyProps) {
 				<div className="max-h-64 overflow-y-auto">
 					<StatusMenuItems
 						statuses={sortedStatuses}
-						currentStatusId={currentStatus.id}
+						currentStatusName={currentStatus.name}
 						onSelect={handleSelectStatus}
 						MenuItem={DropdownMenuItem}
 					/>

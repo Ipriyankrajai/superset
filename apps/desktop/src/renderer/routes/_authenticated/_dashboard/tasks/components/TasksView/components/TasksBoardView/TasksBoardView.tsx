@@ -14,7 +14,10 @@ import type { SelectTaskStatus } from "@superset/db/schema";
 import { useCallback, useMemo, useState } from "react";
 import { useOptimisticCollectionActions } from "renderer/routes/_authenticated/hooks/useOptimisticCollectionActions";
 import type { TaskWithStatus } from "../../hooks/useTasksData";
-import { compareStatusesForDropdown } from "../../utils/sorting";
+import {
+	dedupeStatusesByName,
+	normalizeStatusName,
+} from "../../utils/sorting";
 import { KanbanCard } from "./components/KanbanCard";
 import { KanbanColumn } from "./components/KanbanColumn";
 
@@ -44,18 +47,23 @@ export function TasksBoardView({
 		}),
 	);
 
+	// One column per distinct status name — a Linear workspace with multiple
+	// teams produces duplicate org-level status rows (one "Backlog" per team,
+	// etc.), which would otherwise render as duplicate columns.
 	const sortedStatuses = useMemo(
-		() => [...allStatuses].sort(compareStatusesForDropdown),
+		() => dedupeStatusesByName(allStatuses),
 		[allStatuses],
 	);
 
+	// Bucket tasks by status *name*, not id: a task may point at a duplicate
+	// status row that isn't the representative kept for its column.
 	const tasksByStatus = useMemo(() => {
 		const map = new Map<string, TaskWithStatus[]>();
 		for (const status of sortedStatuses) {
-			map.set(status.id, []);
+			map.set(normalizeStatusName(status.name), []);
 		}
 		for (const task of data) {
-			const existing = map.get(task.statusId);
+			const existing = map.get(normalizeStatusName(task.status.name));
 			if (existing) {
 				existing.push(task);
 			}
@@ -116,7 +124,7 @@ export function TasksBoardView({
 					<KanbanColumn
 						key={status.id}
 						status={status}
-						tasks={tasksByStatus.get(status.id) ?? []}
+						tasks={tasksByStatus.get(normalizeStatusName(status.name)) ?? []}
 						onTaskClick={onTaskClick}
 					/>
 				))}

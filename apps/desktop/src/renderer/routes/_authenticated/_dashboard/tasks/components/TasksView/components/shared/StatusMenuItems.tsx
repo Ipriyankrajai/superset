@@ -1,5 +1,6 @@
 import type { SelectTaskStatus } from "@superset/db/schema";
 import type { ReactNode } from "react";
+import { isSameStatusName } from "../../utils/sorting";
 import { StatusIcon, type StatusType } from "./StatusIcon";
 
 interface MenuItemProps {
@@ -10,21 +11,27 @@ interface MenuItemProps {
 
 interface StatusMenuItemsProps {
 	statuses: SelectTaskStatus[];
-	currentStatusId: string;
+	/**
+	 * Name of the task's current status. Selection is matched by name rather
+	 * than id because duplicate statuses (one per Linear team) are collapsed to
+	 * a single representative row before rendering, so the task's own status row
+	 * may not be the one shown here — but it shares the same name.
+	 */
+	currentStatusName: string;
 	onSelect: (status: SelectTaskStatus) => void;
 	MenuItem: React.ComponentType<MenuItemProps>;
 }
 
 export function StatusMenuItems({
 	statuses,
-	currentStatusId,
+	currentStatusName,
 	onSelect,
 	MenuItem,
 }: StatusMenuItemsProps) {
 	return (
 		<>
 			{statuses.map((status) => {
-				const isSelected = status.id === currentStatusId;
+				const isSelected = isSameStatusName(status.name, currentStatusName);
 				return (
 					<MenuItem
 						key={status.id}

@@ -93,8 +93,8 @@ export function compareTasks(
  * Sort order: status type (workflow order) → status position
  */
 export function compareStatusesForDropdown(
-	a: SelectTaskStatus,
-	b: SelectTaskStatus,
+	a: Pick<SelectTaskStatus, "type" | "position">,
+	b: Pick<SelectTaskStatus, "type" | "position">,
 ): number {
 	// 1. Sort by status type in workflow order (backlog → unstarted → started → completed → canceled)
 	const typeOrderA = getStatusTypeDropdownOrder(a.type);
@@ -105,6 +105,48 @@ export function compareStatusesForDropdown(
 
 	// 2. Within same type, sort by position
 	return a.position - b.position;
+}
+
+/**
+ * Collapse task statuses to one entry per distinct name, sorted in dropdown
+ * (workflow) order.
+ *
+ * Linear scopes workflow states per team, but Superset stores statuses at the
+ * organization level. An org connected to a Linear workspace with multiple
+ * teams therefore ends up with one `task_statuses` row per (team × state) —
+ * e.g. several "Backlog" rows, several "Todo" rows. Left unmerged, every status
+ * picker and Kanban board renders those duplicates, and because same-type rows
+ * sort together the visible list reads as a run of identical "Backlog" options.
+ *
+ * The dedup key is the normalized (trimmed, case-insensitive) name, so renamed
+ * and custom statuses survive and only genuine duplicates merge. A status whose
+ * `type` is unrecognized keeps its real name and sorts to the end via
+ * {@link compareStatusesForDropdown} — it is never remapped or relabeled to
+ * "Backlog".
+ */
+export function dedupeStatusesByName<
+	T extends Pick<SelectTaskStatus, "name" | "type" | "position">,
+>(statuses: T[]): T[] {
+	const sorted = [...statuses].sort(compareStatusesForDropdown);
+	const seen = new Set<string>();
+	const unique: T[] = [];
+	for (const status of sorted) {
+		const key = normalizeStatusName(status.name);
+		if (seen.has(key)) continue;
+		seen.add(key);
+		unique.push(status);
+	}
+	return unique;
+}
+
+/** Normalized key used to identify a status by name (trimmed, lower-cased). */
+export function normalizeStatusName(name: string): string {
+	return name.trim().toLowerCase();
+}
+
+/** Whether two status names refer to the same status (case/space-insensitive). */
+export function isSameStatusName(a: string, b: string): boolean {
+	return normalizeStatusName(a) === normalizeStatusName(b);
 }
 
 /**
