@@ -69,6 +69,10 @@ export const taskStatuses = pgTable(
 		// External sync
 		externalProvider: integrationProvider("external_provider"),
 		externalId: text("external_id"),
+		// Linear workflow states are team-scoped; this records which external
+		// team a status belongs to so status pickers can be scoped to the team
+		// of the task being edited. Null for local/default (non-external) statuses.
+		externalTeamId: text("external_team_id"),
 
 		createdAt: timestamp("created_at").notNull().defaultNow(),
 		updatedAt: timestamp("updated_at")
@@ -79,6 +83,7 @@ export const taskStatuses = pgTable(
 	(table) => [
 		index("task_statuses_organization_id_idx").on(table.organizationId),
 		index("task_statuses_type_idx").on(table.type),
+		index("task_statuses_external_team_id_idx").on(table.externalTeamId),
 		unique("task_statuses_org_external_unique").on(
 			table.organizationId,
 			table.externalProvider,
@@ -137,6 +142,9 @@ export const tasks = pgTable(
 		externalProjectName: text("external_project_name"),
 		externalCycleId: text("external_cycle_id"),
 		externalCycleName: text("external_cycle_name"),
+		// External team the task belongs to (Linear workflow states are
+		// team-scoped, so this scopes the status picker). Null for local tasks.
+		externalTeamId: text("external_team_id"),
 
 		// External assignee snapshot (for unmatched Linear users)
 		assigneeExternalId: text("assignee_external_id"),
@@ -165,6 +173,7 @@ export const tasks = pgTable(
 		index("tasks_external_project_id_idx").on(table.externalProjectId),
 		index("tasks_external_project_name_idx").on(table.externalProjectName),
 		index("tasks_external_cycle_id_idx").on(table.externalCycleId),
+		index("tasks_external_team_id_idx").on(table.externalTeamId),
 		index("tasks_assignee_external_id_idx").on(table.assigneeExternalId),
 		unique("tasks_external_unique").on(
 			table.organizationId,

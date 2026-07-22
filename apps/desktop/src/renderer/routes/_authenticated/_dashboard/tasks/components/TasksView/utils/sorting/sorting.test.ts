@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
 	compareStatusesForDropdown,
 	dedupeStatusesByName,
+	getStatusesForTeam,
 	isSameStatusName,
 	normalizeStatusName,
 } from "./sorting";
@@ -12,6 +13,7 @@ type StatusFixture = {
 	color: string;
 	type: string;
 	position: number;
+	externalTeamId: string | null;
 };
 
 function status(
@@ -19,8 +21,9 @@ function status(
 	name: string,
 	type: string,
 	position: number,
+	externalTeamId: string | null = null,
 ): StatusFixture {
-	return { id, name, color: "#000", type, position };
+	return { id, name, color: "#000", type, position, externalTeamId };
 }
 
 // The default set every org is seeded with (see packages/db seed-default-statuses).
@@ -142,6 +145,62 @@ describe("dedupeStatusesByName", () => {
 		const snapshot = names(input);
 		dedupeStatusesByName(input);
 		expect(names(input)).toEqual(snapshot);
+	});
+});
+
+describe("getStatusesForTeam", () => {
+	// Two teams synced into one org: Design has custom states, QA has defaults.
+	const design: StatusFixture[] = [
+		status("des-backlog", "Backlog", "backlog", 0, "team-design"),
+		status("des-triage", "Triage", "triage", 1, "team-design"),
+		status("des-progress", "In Progress", "started", 2, "team-design"),
+		status("des-shipped", "Shipped", "completed", 3, "team-design"),
+	];
+	const qa: StatusFixture[] = [
+		status("qa-backlog", "Backlog", "backlog", 0, "team-qa"),
+		status("qa-todo", "Todo", "unstarted", 1, "team-qa"),
+		status("qa-progress", "In Progress", "started", 2, "team-qa"),
+		status("qa-done", "Done", "completed", 3, "team-qa"),
+	];
+	const allStatuses = [...design, ...qa];
+
+	test("scopes a task to only its own team's statuses", () => {
+		// A QA task must not see Design's custom "Triage"/"Shipped".
+		const result = getStatusesForTeam(allStatuses, "team-qa");
+		expect(names(result)).toEqual(["Backlog", "Todo", "In Progress", "Done"]);
+		expect(names(result)).not.toContain("Triage");
+		expect(names(result)).not.toContain("Shipped");
+	});
+
+	test("keeps a team's custom statuses for its own tasks", () => {
+		const result = getStatusesForTeam(allStatuses, "team-design");
+		expect(names(result)).toEqual([
+			"Backlog",
+			"In Progress",
+			"Shipped",
+			"Triage",
+		]);
+	});
+
+	test("falls back to all statuses (deduped) when the task has no team", () => {
+		// Local / default-status orgs: no external team → show everything once.
+		const result = getStatusesForTeam(allStatuses, null);
+		// Backlog and In Progress are shared names, so they collapse to one each.
+		expect(names(result).filter((n) => n === "Backlog")).toHaveLength(1);
+		expect(names(result).filter((n) => n === "In Progress")).toHaveLength(1);
+		expect(names(result)).toContain("Triage");
+		expect(names(result)).toContain("Shipped");
+	});
+
+	test("falls back to all when the team has no synced statuses yet", () => {
+		// Data synced before team ids were recorded: none carry the team, so
+		// scoping would empty the picker — fall back instead of breaking it.
+		const untagged: StatusFixture[] = [
+			status("s-backlog", "Backlog", "backlog", 0, null),
+			status("s-todo", "Todo", "unstarted", 1, null),
+		];
+		const result = getStatusesForTeam(untagged, "team-qa");
+		expect(names(result)).toEqual(["Backlog", "Todo"]);
 	});
 });
 

@@ -204,6 +204,7 @@ async function performInitialSync(
 						"externalProjectName",
 						"externalCycleId",
 						"externalCycleName",
+						"externalTeamId",
 						"lastSyncedAt",
 					]),
 					syncError: null,

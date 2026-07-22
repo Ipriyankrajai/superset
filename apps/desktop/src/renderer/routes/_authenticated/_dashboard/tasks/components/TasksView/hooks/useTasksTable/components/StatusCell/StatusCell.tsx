@@ -15,7 +15,7 @@ import {
 } from "../../../../components/shared/StatusIcon";
 import { StatusMenuItems } from "../../../../components/shared/StatusMenuItems";
 import {
-	dedupeStatusesByName,
+	getStatusesForTeam,
 	isSameStatusName,
 } from "../../../../utils/sorting";
 import type { TaskWithStatus } from "../../useTasksTable";
@@ -38,8 +38,8 @@ export function StatusCell({ taskWithStatus }: StatusCellProps) {
 	const currentStatus = taskWithStatus.status;
 
 	const sortedStatuses = useMemo(
-		() => dedupeStatusesByName(statuses),
-		[statuses],
+		() => getStatusesForTeam(statuses, taskWithStatus.externalTeamId),
+		[statuses, taskWithStatus.externalTeamId],
 	);
 
 	const handleSelectStatus = (newStatus: SelectTaskStatus) => {

@@ -139,6 +139,33 @@ export function dedupeStatusesByName<
 	return unique;
 }
 
+/**
+ * Statuses selectable for a task, scoped to the task's Linear team.
+ *
+ * Linear workflow states are team-scoped: an issue can only move between the
+ * states of its own team. Superset stores statuses at the org level, so without
+ * scoping a task's picker would list every team's statuses — including custom
+ * ones the task's team doesn't have. Picking a foreign status then silently
+ * fails to sync (Linear can't resolve that state for the team).
+ *
+ * When the task has an external team, restrict options to that team's statuses.
+ * Fall back to the full (deduped) set when the task has no team (local or
+ * default-status orgs) or when no status carries the team yet (data synced
+ * before team ids were recorded), so nothing regresses before a re-sync.
+ */
+export function getStatusesForTeam<
+	T extends Pick<
+		SelectTaskStatus,
+		"name" | "type" | "position" | "externalTeamId"
+	>,
+>(statuses: T[], teamId: string | null | undefined): T[] {
+	if (teamId) {
+		const scoped = statuses.filter((s) => s.externalTeamId === teamId);
+		if (scoped.length > 0) return dedupeStatusesByName(scoped);
+	}
+	return dedupeStatusesByName(statuses);
+}
+
 /** Normalized key used to identify a status by name (trimmed, lower-cased). */
 export function normalizeStatusName(name: string): string {
 	return name.trim().toLowerCase();

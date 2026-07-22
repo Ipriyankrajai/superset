@@ -20,7 +20,7 @@ import { useCopyToClipboard } from "renderer/hooks/useCopyToClipboard";
 import { useOptimisticCollectionActions } from "renderer/routes/_authenticated/hooks/useOptimisticCollectionActions";
 import { useCollections } from "renderer/routes/_authenticated/providers/CollectionsProvider";
 import type { TaskWithStatus } from "../../../../hooks/useTasksTable";
-import { dedupeStatusesByName } from "../../../../utils/sorting";
+import { getStatusesForTeam } from "../../../../utils/sorting";
 import { AssigneeMenuItems } from "../../../shared/AssigneeMenuItems";
 import { ActiveIcon } from "../../../shared/icons/ActiveIcon";
 import { PriorityMenuIcon } from "../../../shared/icons/PriorityMenuIcon";
@@ -53,8 +53,8 @@ export function TaskContextMenu({
 
 	const sortedStatuses = useMemo(() => {
 		if (!allStatuses) return [];
-		return dedupeStatusesByName(allStatuses);
-	}, [allStatuses]);
+		return getStatusesForTeam(allStatuses, task.externalTeamId);
+	}, [allStatuses, task.externalTeamId]);
 
 	const users = useMemo(() => allUsers || [], [allUsers]);
 

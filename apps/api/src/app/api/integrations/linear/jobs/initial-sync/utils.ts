@@ -30,6 +30,7 @@ export interface LinearIssue {
 	labels: { nodes: Array<{ id: string; name: string }> };
 	project: { id: string; name: string } | null;
 	cycle: { id: string; name: string } | null;
+	team: { id: string } | null;
 }
 
 interface IssuesQueryResponse {
@@ -130,6 +131,9 @@ const ISSUES_QUERY = `
           id
           name
         }
+        team {
+          id
+        }
       }
     }
   }
@@ -213,6 +217,7 @@ export function mapIssueToTask(
 		externalProjectName: issue.project?.name ?? null,
 		externalCycleId: issue.cycle?.id ?? null,
 		externalCycleName: issue.cycle?.name ?? null,
+		externalTeamId: issue.team?.id ?? null,
 		lastSyncedAt: new Date(),
 	};
 }
