@@ -47,16 +47,11 @@ export function TasksBoardView({
 		}),
 	);
 
-	// One column per distinct status name — a Linear workspace with multiple
-	// teams produces duplicate org-level status rows (one "Backlog" per team,
-	// etc.), which would otherwise render as duplicate columns.
 	const sortedStatuses = useMemo(
 		() => dedupeStatusesByName(allStatuses),
 		[allStatuses],
 	);
 
-	// Bucket tasks by status *name*, not id: a task may point at a duplicate
-	// status row that isn't the representative kept for its column.
 	const tasksByStatus = useMemo(() => {
 		const map = new Map<string, TaskWithStatus[]>();
 		for (const status of sortedStatuses) {

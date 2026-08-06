@@ -77,8 +77,6 @@ export function CreateTaskDialog({
 		[collections],
 	);
 
-	// New tasks are created in the Linear-configured team, so scope the status
-	// picker to that team's workflow states (see getStatusesForTeam).
 	const { data: linearConnections } = useLiveQuery(
 		(q) =>
 			q

@@ -69,9 +69,6 @@ export const taskStatuses = pgTable(
 		// External sync
 		externalProvider: integrationProvider("external_provider"),
 		externalId: text("external_id"),
-		// Linear workflow states are team-scoped; this records which external
-		// team a status belongs to so status pickers can be scoped to the team
-		// of the task being edited. Null for local/default (non-external) statuses.
 		externalTeamId: text("external_team_id"),
 
 		createdAt: timestamp("created_at").notNull().defaultNow(),
@@ -142,8 +139,6 @@ export const tasks = pgTable(
 		externalProjectName: text("external_project_name"),
 		externalCycleId: text("external_cycle_id"),
 		externalCycleName: text("external_cycle_name"),
-		// External team the task belongs to (Linear workflow states are
-		// team-scoped, so this scopes the status picker). Null for local tasks.
 		externalTeamId: text("external_team_id"),
 
 		// External assignee snapshot (for unmatched Linear users)

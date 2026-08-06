@@ -26,7 +26,6 @@ function status(
 	return { id, name, color: "#000", type, position, externalTeamId };
 }
 
-// The default set every org is seeded with (see packages/db seed-default-statuses).
 const DEFAULT_STATUSES: StatusFixture[] = [
 	status("d-backlog", "Backlog", "backlog", 0),
 	status("d-todo", "Todo", "unstarted", 1),
@@ -85,8 +84,6 @@ describe("dedupeStatusesByName", () => {
 	});
 
 	test("collapses duplicate statuses from multiple Linear teams (the bug)", () => {
-		// A workspace with three teams (DES, QA, INT) yields three of every
-		// status — each with a distinct id but the same name.
 		const multiTeam: StatusFixture[] = [
 			status("des-backlog", "Backlog", "backlog", 0),
 			status("des-todo", "Todo", "unstarted", 1),
@@ -99,7 +96,6 @@ describe("dedupeStatusesByName", () => {
 			status("int-progress", "In Progress", "started", 2),
 		];
 		const result = dedupeStatusesByName(multiTeam);
-		// Each status name appears exactly once — not a run of "Backlog".
 		expect(names(result)).toEqual(["Backlog", "Todo", "In Progress"]);
 	});
 
@@ -114,7 +110,6 @@ describe("dedupeStatusesByName", () => {
 	});
 
 	test("shows a renamed Linear status under its new name", () => {
-		// "In Progress" renamed to "Working On It" in Linear.
 		const renamed: StatusFixture[] = [
 			status("s-backlog", "Backlog", "backlog", 0),
 			status("s-working", "Working On It", "started", 2),
@@ -125,18 +120,14 @@ describe("dedupeStatusesByName", () => {
 	});
 
 	test("keeps an unknown status type and never relabels it to Backlog", () => {
-		// Linear's "triage" type is not one of the app's known types.
 		const withUnknown: StatusFixture[] = [
 			status("s-backlog", "Backlog", "backlog", 0),
 			status("s-triage", "Triage", "triage", 0),
 			status("s-done", "Done", "completed", 3),
 		];
 		const result = dedupeStatusesByName(withUnknown);
-		// Triage is preserved with its real name...
 		expect(names(result)).toContain("Triage");
-		// ...appears exactly once...
 		expect(names(result).filter((n) => n === "Triage")).toHaveLength(1);
-		// ...and unknown types sort to the end, never collapsing into Backlog.
 		expect(names(result)).toEqual(["Backlog", "Done", "Triage"]);
 	});
 
@@ -149,7 +140,6 @@ describe("dedupeStatusesByName", () => {
 });
 
 describe("getStatusesForTeam", () => {
-	// Two teams synced into one org: Design has custom states, QA has defaults.
 	const design: StatusFixture[] = [
 		status("des-backlog", "Backlog", "backlog", 0, "team-design"),
 		status("des-triage", "Triage", "triage", 1, "team-design"),
@@ -165,7 +155,6 @@ describe("getStatusesForTeam", () => {
 	const allStatuses = [...design, ...qa];
 
 	test("scopes a task to only its own team's statuses", () => {
-		// A QA task must not see Design's custom "Triage"/"Shipped".
 		const result = getStatusesForTeam(allStatuses, "team-qa");
 		expect(names(result)).toEqual(["Backlog", "Todo", "In Progress", "Done"]);
 		expect(names(result)).not.toContain("Triage");
@@ -183,9 +172,7 @@ describe("getStatusesForTeam", () => {
 	});
 
 	test("falls back to all statuses (deduped) when the task has no team", () => {
-		// Local / default-status orgs: no external team → show everything once.
 		const result = getStatusesForTeam(allStatuses, null);
-		// Backlog and In Progress are shared names, so they collapse to one each.
 		expect(names(result).filter((n) => n === "Backlog")).toHaveLength(1);
 		expect(names(result).filter((n) => n === "In Progress")).toHaveLength(1);
 		expect(names(result)).toContain("Triage");
@@ -193,8 +180,6 @@ describe("getStatusesForTeam", () => {
 	});
 
 	test("falls back to all when the team has no synced statuses yet", () => {
-		// Data synced before team ids were recorded: none carry the team, so
-		// scoping would empty the picker — fall back instead of breaking it.
 		const untagged: StatusFixture[] = [
 			status("s-backlog", "Backlog", "backlog", 0, null),
 			status("s-todo", "Todo", "unstarted", 1, null),

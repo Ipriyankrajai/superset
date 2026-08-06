@@ -107,23 +107,6 @@ export function compareStatusesForDropdown(
 	return a.position - b.position;
 }
 
-/**
- * Collapse task statuses to one entry per distinct name, sorted in dropdown
- * (workflow) order.
- *
- * Linear scopes workflow states per team, but Superset stores statuses at the
- * organization level. An org connected to a Linear workspace with multiple
- * teams therefore ends up with one `task_statuses` row per (team × state) —
- * e.g. several "Backlog" rows, several "Todo" rows. Left unmerged, every status
- * picker and Kanban board renders those duplicates, and because same-type rows
- * sort together the visible list reads as a run of identical "Backlog" options.
- *
- * The dedup key is the normalized (trimmed, case-insensitive) name, so renamed
- * and custom statuses survive and only genuine duplicates merge. A status whose
- * `type` is unrecognized keeps its real name and sorts to the end via
- * {@link compareStatusesForDropdown} — it is never remapped or relabeled to
- * "Backlog".
- */
 export function dedupeStatusesByName<
 	T extends Pick<SelectTaskStatus, "name" | "type" | "position">,
 >(statuses: T[]): T[] {
@@ -139,20 +122,6 @@ export function dedupeStatusesByName<
 	return unique;
 }
 
-/**
- * Statuses selectable for a task, scoped to the task's Linear team.
- *
- * Linear workflow states are team-scoped: an issue can only move between the
- * states of its own team. Superset stores statuses at the org level, so without
- * scoping a task's picker would list every team's statuses — including custom
- * ones the task's team doesn't have. Picking a foreign status then silently
- * fails to sync (Linear can't resolve that state for the team).
- *
- * When the task has an external team, restrict options to that team's statuses.
- * Fall back to the full (deduped) set when the task has no team (local or
- * default-status orgs) or when no status carries the team yet (data synced
- * before team ids were recorded), so nothing regresses before a re-sync.
- */
 export function getStatusesForTeam<
 	T extends Pick<
 		SelectTaskStatus,
@@ -166,12 +135,10 @@ export function getStatusesForTeam<
 	return dedupeStatusesByName(statuses);
 }
 
-/** Normalized key used to identify a status by name (trimmed, lower-cased). */
 export function normalizeStatusName(name: string): string {
 	return name.trim().toLowerCase();
 }
 
-/** Whether two status names refer to the same status (case/space-insensitive). */
 export function isSameStatusName(a: string, b: string): boolean {
 	return normalizeStatusName(a) === normalizeStatusName(b);
 }
