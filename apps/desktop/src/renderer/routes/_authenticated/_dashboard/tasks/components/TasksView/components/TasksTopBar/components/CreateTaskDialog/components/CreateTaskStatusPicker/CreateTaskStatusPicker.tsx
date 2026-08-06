@@ -12,7 +12,7 @@ import {
 	type StatusType,
 } from "renderer/routes/_authenticated/_dashboard/tasks/components/TasksView/components/shared/StatusIcon";
 import { StatusMenuItems } from "renderer/routes/_authenticated/_dashboard/tasks/components/TasksView/components/shared/StatusMenuItems";
-import { compareStatusesForDropdown } from "renderer/routes/_authenticated/_dashboard/tasks/components/TasksView/utils/sorting";
+import { dedupeStatusesByName } from "renderer/routes/_authenticated/_dashboard/tasks/components/TasksView/utils/sorting";
 
 interface CreateTaskStatusPickerProps {
 	statuses: SelectTaskStatus[];
@@ -33,7 +33,7 @@ export function CreateTaskStatusPicker({
 	);
 
 	const sortedStatuses = useMemo(
-		() => [...statuses].sort(compareStatusesForDropdown),
+		() => dedupeStatusesByName(statuses),
 		[statuses],
 	);
 
@@ -63,7 +63,7 @@ export function CreateTaskStatusPicker({
 			<DropdownMenuContent align="start" className="w-52 p-1">
 				<StatusMenuItems
 					statuses={sortedStatuses}
-					currentStatusId={value ?? ""}
+					currentStatusName={currentStatus?.name ?? ""}
 					onSelect={(status) => {
 						onChange(status.id);
 						setOpen(false);

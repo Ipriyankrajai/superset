@@ -1,5 +1,6 @@
 import type { SelectTaskStatus } from "@superset/db/schema";
 import type { ReactNode } from "react";
+import { isSameStatusName } from "../../utils/sorting";
 import { StatusIcon, type StatusType } from "./StatusIcon";
 
 interface MenuItemProps {
@@ -10,21 +11,21 @@ interface MenuItemProps {
 
 interface StatusMenuItemsProps {
 	statuses: SelectTaskStatus[];
-	currentStatusId: string;
+	currentStatusName: string;
 	onSelect: (status: SelectTaskStatus) => void;
 	MenuItem: React.ComponentType<MenuItemProps>;
 }
 
 export function StatusMenuItems({
 	statuses,
-	currentStatusId,
+	currentStatusName,
 	onSelect,
 	MenuItem,
 }: StatusMenuItemsProps) {
 	return (
 		<>
 			{statuses.map((status) => {
-				const isSelected = status.id === currentStatusId;
+				const isSelected = isSameStatusName(status.name, currentStatusName);
 				return (
 					<MenuItem
 						key={status.id}

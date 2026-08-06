@@ -234,6 +234,7 @@ async function processIssueEvent(
 						externalCycleName: issue.cycle?.name ?? null,
 					}
 				: {}),
+			externalTeamId: issue.teamId ?? null,
 			lastSyncedAt: new Date(),
 		};
 

@@ -12,6 +12,7 @@ import {
 } from "@superset/ui/dialog";
 import { Kbd, KbdGroup } from "@superset/ui/kbd";
 import { toast } from "@superset/ui/sonner";
+import { eq } from "@tanstack/db";
 import { useLiveQuery } from "@tanstack/react-db";
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -20,7 +21,7 @@ import { MarkdownEditor } from "renderer/components/MarkdownEditor";
 import { PLATFORM } from "renderer/hotkeys";
 import { apiTrpcClient } from "renderer/lib/api-trpc-client";
 import { useCollections } from "renderer/routes/_authenticated/providers/CollectionsProvider";
-import { compareStatusesForDropdown } from "../../../../utils/sorting";
+import { getStatusesForTeam } from "../../../../utils/sorting";
 import type { TabValue } from "../../TasksTopBar";
 import { CreateTaskAssigneePicker } from "./components/CreateTaskAssigneePicker";
 import { CreateTaskPriorityPicker } from "./components/CreateTaskPriorityPicker";
@@ -76,7 +77,32 @@ export function CreateTaskDialog({
 		[collections],
 	);
 
+	const { data: linearConnections } = useLiveQuery(
+		(q) =>
+			q
+				.from({ integrationConnections: collections.integrationConnections })
+				.where(({ integrationConnections }) =>
+					eq(integrationConnections.provider, "linear"),
+				)
+				.select(({ integrationConnections }) => ({
+					config: integrationConnections.config,
+				})),
+		[collections],
+	);
+
+	const newTasksTeamId = useMemo(() => {
+		const config = linearConnections?.[0]?.config;
+		if (config && config.provider === "linear") {
+			return config.newTasksTeamId ?? null;
+		}
+		return null;
+	}, [linearConnections]);
+
 	const statuses = useMemo(() => statusData ?? [], [statusData]);
+	const teamStatuses = useMemo(
+		() => getStatusesForTeam(statuses, newTasksTeamId),
+		[statuses, newTasksTeamId],
+	);
 	const users = useMemo(() => userData ?? [], [userData]);
 	const activeOrganizationId = session?.session?.activeOrganizationId ?? null;
 	const organizationLabel = useMemo(() => {
@@ -87,13 +113,12 @@ export function CreateTaskDialog({
 	}, [activeOrganizationId, organizationData]);
 
 	const defaultStatusId = useMemo(() => {
-		const sortedStatuses = [...statuses].sort(compareStatusesForDropdown);
 		return (
-			sortedStatuses.find((status) => status.type === "backlog")?.id ??
-			sortedStatuses[0]?.id ??
+			teamStatuses.find((status) => status.type === "backlog")?.id ??
+			teamStatuses[0]?.id ??
 			null
 		);
-	}, [statuses]);
+	}, [teamStatuses]);
 
 	useEffect(() => {
 		if (open && statusId === null && defaultStatusId) {
@@ -223,7 +248,7 @@ export function CreateTaskDialog({
 
 					<div className="mt-4 flex flex-wrap items-center gap-2">
 						<CreateTaskStatusPicker
-							statuses={statuses}
+							statuses={teamStatuses}
 							value={statusId}
 							onChange={setStatusId}
 						/>

@@ -39,6 +39,7 @@ export async function syncWorkflowStates({
 				state.type === "started" ? (progressMap.get(state.name) ?? null) : null,
 			externalProvider: "linear" as const,
 			externalId: state.id,
+			externalTeamId: team.id,
 		}));
 
 		if (values.length > 0) {
@@ -58,6 +59,7 @@ export async function syncWorkflowStates({
 							"type",
 							"position",
 							"progressPercent",
+							"externalTeamId",
 						]),
 						updatedAt: new Date(),
 					},

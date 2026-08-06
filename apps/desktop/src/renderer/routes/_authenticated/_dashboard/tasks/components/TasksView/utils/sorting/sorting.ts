@@ -93,8 +93,8 @@ export function compareTasks(
  * Sort order: status type (workflow order) → status position
  */
 export function compareStatusesForDropdown(
-	a: SelectTaskStatus,
-	b: SelectTaskStatus,
+	a: Pick<SelectTaskStatus, "type" | "position">,
+	b: Pick<SelectTaskStatus, "type" | "position">,
 ): number {
 	// 1. Sort by status type in workflow order (backlog → unstarted → started → completed → canceled)
 	const typeOrderA = getStatusTypeDropdownOrder(a.type);
@@ -105,6 +105,42 @@ export function compareStatusesForDropdown(
 
 	// 2. Within same type, sort by position
 	return a.position - b.position;
+}
+
+export function dedupeStatusesByName<
+	T extends Pick<SelectTaskStatus, "name" | "type" | "position">,
+>(statuses: T[]): T[] {
+	const sorted = [...statuses].sort(compareStatusesForDropdown);
+	const seen = new Set<string>();
+	const unique: T[] = [];
+	for (const status of sorted) {
+		const key = normalizeStatusName(status.name);
+		if (seen.has(key)) continue;
+		seen.add(key);
+		unique.push(status);
+	}
+	return unique;
+}
+
+export function getStatusesForTeam<
+	T extends Pick<
+		SelectTaskStatus,
+		"name" | "type" | "position" | "externalTeamId"
+	>,
+>(statuses: T[], teamId: string | null | undefined): T[] {
+	if (teamId) {
+		const scoped = statuses.filter((s) => s.externalTeamId === teamId);
+		if (scoped.length > 0) return dedupeStatusesByName(scoped);
+	}
+	return dedupeStatusesByName(statuses);
+}
+
+export function normalizeStatusName(name: string): string {
+	return name.trim().toLowerCase();
+}
+
+export function isSameStatusName(a: string, b: string): boolean {
+	return normalizeStatusName(a) === normalizeStatusName(b);
 }
 
 /**

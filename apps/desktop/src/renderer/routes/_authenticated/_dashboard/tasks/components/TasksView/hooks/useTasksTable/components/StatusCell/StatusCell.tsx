@@ -14,7 +14,10 @@ import {
 	type StatusType,
 } from "../../../../components/shared/StatusIcon";
 import { StatusMenuItems } from "../../../../components/shared/StatusMenuItems";
-import { compareStatusesForDropdown } from "../../../../utils/sorting";
+import {
+	getStatusesForTeam,
+	isSameStatusName,
+} from "../../../../utils/sorting";
 import type { TaskWithStatus } from "../../useTasksTable";
 
 interface StatusCellProps {
@@ -34,12 +37,13 @@ export function StatusCell({ taskWithStatus }: StatusCellProps) {
 	const statuses = useMemo(() => allStatuses || [], [allStatuses]);
 	const currentStatus = taskWithStatus.status;
 
-	const sortedStatuses = useMemo(() => {
-		return statuses.sort(compareStatusesForDropdown);
-	}, [statuses]);
+	const sortedStatuses = useMemo(
+		() => getStatusesForTeam(statuses, taskWithStatus.externalTeamId),
+		[statuses, taskWithStatus.externalTeamId],
+	);
 
 	const handleSelectStatus = (newStatus: SelectTaskStatus) => {
-		if (newStatus.id === currentStatus.id) {
+		if (isSameStatusName(newStatus.name, currentStatus.name)) {
 			setOpen(false);
 			return;
 		}
@@ -77,7 +81,7 @@ export function StatusCell({ taskWithStatus }: StatusCellProps) {
 				<div className="max-h-64 overflow-y-auto">
 					<StatusMenuItems
 						statuses={sortedStatuses}
-						currentStatusId={currentStatus.id}
+						currentStatusName={currentStatus.name}
 						onSelect={handleSelectStatus}
 						MenuItem={DropdownMenuItem}
 					/>
